@@ -1,6 +1,8 @@
-use std::fs::File;
-use std::io::{self, Read, Write};
-use tracing::{error, info, warn};
+use std::{
+    fs::File,
+    io::{Read, Write},
+};
+use tracing::{error, info};
 
 pub fn read_file(path: &str) -> Result<String, String> {
     let res = File::open(path);

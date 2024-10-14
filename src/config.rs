@@ -6,8 +6,8 @@ use tracing::{error, info, warn};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
-    interface: String,
-    port: u16,
+    pub interface: String,
+    pub port: u16,
 }
 
 pub fn init_config() -> Config {
