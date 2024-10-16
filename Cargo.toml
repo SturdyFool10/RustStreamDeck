@@ -9,9 +9,15 @@ serde_json = { version = "1.0.105", features = ["float_roundtrip"] }
 tokio = { version = "1.40.0", features = ["full", "tracing"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["tracing"] }
-axum = { version = "0.6.20", features = ["tracing", "ws", "macros", "headers"] }
-axum-extra = "0.7.7"
-cargo-watch = "8.4.0"
 futures = "0.3.28"
 futures-util = "0.3.28"
 regex = "1.10.2"
+tonic = { version = "0.12.3", features = ["tls"] }
+prost = "0.13.3"
+axum = { version = "0.6.20", features = ["tracing", "ws", "macros", "headers"] }
+axum-extra = "0.7.7"
+axum_tonic = "0.2.0"
+
+
+[build-dependencies]
+tonic-build = "0.12.3"

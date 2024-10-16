@@ -1,7 +1,6 @@
 use crate::config::Config;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::*;
 
 #[derive(Clone)]
 pub struct AppState {

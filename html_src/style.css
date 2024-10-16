@@ -1,0 +1,111 @@
+:root {
+    --pageBG: #0e0e0e;
+    --textCol: #e5e5e5;
+    --menuBG: #1d1d1d;
+    --highlightCol: #a200ff;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+    background-color: var(--pageBG);
+}
+
+.menu-icon {
+    position: relative;
+    top: 0px;
+    left: 0px;
+    width: 30px;
+    height: 30px;
+    padding: 20px;
+    border-bottom-right-radius: 20px;
+    background-color: var(--menuBG);
+    overflow: hidden;
+    cursor: pointer;
+    z-index: 1000;
+}
+
+.bar {
+    width: 30px;
+    height: 3px;
+    background-color: var(--textCol);
+    margin: 6px 0;
+}
+
+.menu {
+    position: absolute;
+    left: 0;
+    width: 25%;
+    height: 100%;
+    background-color: var(--menuBG);
+    color: var(--textCol);
+}
+
+.menu ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 80px 0 0 0;
+    text-align: center;
+}
+
+.active {
+    border-width: 3px;
+    border-color: var(--highlightCol);
+    border-style: solid none solid none;
+}
+
+.menu li {
+    width: 100%;
+    padding: 10px 0;
+}
+
+.menu a {
+    text-decoration: none;
+    color: var(--textCol);
+    font-size: 18px;
+}
+
+#main-content {
+    position: absolute;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    transition: background-color 0.35s ease;
+}
+
+#main-content.regular {
+    transition: background-color 0.35s ease;
+    background: linear-gradient(
+        90 deg,
+        var(--highlightCol) 0%,
+        var(--pageBG) 0%,
+        var(--pageBG) 100%
+    );
+}
+
+.shifted {
+    transition: background-color 0.35s ease;
+}
+
+.page {
+    position: absolute;
+    width: 100%;
+    top: 0px;
+    height: 100%;
+}
+
+h1 {
+    color: var(--textCol);
+    width: 100%;
+    text-align: center;
+}
+
+.overlay {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    z-index: 100;
+}
