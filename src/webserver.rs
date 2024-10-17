@@ -1,70 +1,57 @@
 use std::net::SocketAddr;
-
-use axum::{
-    body::Body,
-    extract::{
-        ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
-    },
-    http::StatusCode,
-    response::{Html, IntoResponse, Response},
-    routing::get,
-    Router, ServiceExt,
-};
-use axum_extra::response::{Css, JavaScript};
-use axum_tonic::NestTonic;
-use tonic::transport::Server;
-use tracing::*;
-
+use axum::extract::State;
+use axum::Router;
+use axum::routing::get;
+use axum_extra::response::{Css, Html, JavaScript};
+use tracing::info;
 use crate::appstate::AppState;
-
+//this is the entry function for the file, as such, it will choose how everything works from the top, and is in charge of using the config to start a web server, it will not exit unless the start_server function does
 pub async fn start_web_server(state: AppState) {
-    let state2 = state.clone();
-    let config = state2.config.lock().await;
-    //if interface = 0.0.0.0, replace with * for better output
-    let interf: String = config.interface.clone();
-    let interface_addr = interf.clone();
-    let port = config.port;
-    let interf = interf.replace("0.0.0.0", "*");
-    let router = get_router(state.clone()).await;
-    info!("Starting webserver on: {}:{}", interf, port.to_string());
-    drop(config); // Drop the lock
-    let addr: SocketAddr = format!("{}:{}", interface_addr, port)
-        .parse()
-        .expect("Invalid address");
-    let service = router.into_make_service();
-    axum::Server::bind(&addr).serve(service).await.unwrap();
+    let (interface_proper, interface_pretty, port) = get_config_values(state.clone()).await;
+    info!("Starting web server on {}:{}", interface_pretty, port);
+
+    let address: SocketAddr = SocketAddr::new(interface_proper.parse().expect("config.interface is an invalid IP address\nif you don't care where requests come from, use 0.0.0.0\nto only accept requests from the local network, find your gateway IP and configure interface to match that.\nin a multi-network situation, choose the IP of the network adapter within the network you want to accept requests from, only requests from there would be accepted"), port);
+
+    start_server(state, address).await;
 }
 
-async fn get_router(_state: AppState) -> Router {
+//I've reworked the webserver a couple of times, these operations are consistently needed though, so I extracted it into a different function
+async fn get_config_values(state: AppState) -> (String, String, u16) {
+    let config = state.config.lock().await; //config is inside an arc mutex, we need to lock it, this prevents other code that requires the config from running until we drop it
+    let interface_proper = config.interface.clone();
+    let interface_pretty = interface_proper.replace("0.0.0.0", "*"); //make the output more pretty, this is worth it, especially such a simple operation
+    let port = config.port.clone();
+    drop(config); //drop config as soon as we can so we don't hold anything else up
+    (interface_proper, interface_pretty, port)
+}
+
+//the function below is an internal function to the file, no other files can rely on it, it shall not exit unless the webserver goes down
+async fn start_server(state: AppState, address: SocketAddr) {
+    let router: Router = create_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+    axum::serve(listener, router).await.unwrap();
+}
+
+fn create_router(state: AppState) -> Router {
     let router: Router = Router::new()
         .route("/", get(handle_html))
-        .route("/index.js", get(handle_main_js))
+        .route("/index.js", get(handle_javascript))
         .route("/style.css", get(handle_css))
-        .with_state(_state);
+        .with_state(state);
     router
 }
-/*
-async fn handle_icon(State(state): State<AppState>) -> impl IntoResponse {
-    let ico_bytes: &'static [u8] = include_bytes!("../html_src/icon.ico");
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "image/x-icon")
-        .body(Body::from(ico_bytes))
-        .unwrap();
 
-    response
-}*/
-//create handlers for the routes
-async fn handle_html(State(state): State<AppState>) -> Html<String> {
-    let body = include_str!("../html_src/index.html");
-    Html(body.to_string())
+//the handlers below need no state, they just return their static files respectively
+async fn handle_html(State(_): State<AppState>) -> Html<String> {
+    let str = include_str!("../html_src/index.html");
+    Html(str.to_owned())
 }
-async fn handle_main_js(State(state): State<AppState>) -> JavaScript<String> {
-    let body = include_str!("../html_src/index.js");
-    JavaScript(body.to_string())
+async fn handle_javascript(State(_): State<AppState>) -> JavaScript<String> {
+    let str = include_str!("../html_src/index.js");
+    JavaScript(str.to_owned())
 }
-async fn handle_css(State(state): State<AppState>) -> Css<String> {
-    let body = include_str!("../html_src/style.css");
-    Css(body.to_string())
+async fn handle_css(State(_): State<AppState>) -> Css<String> {
+    let str = include_str!("../html_src/style.css");
+    Css(str.to_owned())
 }

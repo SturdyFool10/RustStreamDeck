@@ -3,7 +3,6 @@ mod config;
 mod files;
 mod logging;
 mod macros;
-mod proto;
 mod webserver;
 
 use tokio::spawn;
@@ -39,7 +38,7 @@ async fn main() {
     init_logging();
     let config = init_config();
     let state: AppState = AppState::new(config);
-    let mut handles = spawn_tasks!(state, start_web_server);
+    let handles = spawn_tasks!(state, start_web_server);
     info!("Started {} tasks", handles.len());
     for handle in handles {
         handle.await.expect("Task panicked");
