@@ -1,5 +1,8 @@
 use std::net::SocketAddr;
-use axum::extract::State;
+use axum::extract::{State, WebSocketUpgrade};
+use axum::extract::ws::WebSocket;
+use axum::http::Response;
+use axum::response::IntoResponse;
 use axum::Router;
 use axum::routing::get;
 use axum_extra::response::{Css, Html, JavaScript};
@@ -38,6 +41,7 @@ fn create_router(state: AppState) -> Router {
         .route("/", get(handle_html))
         .route("/index.js", get(handle_javascript))
         .route("/style.css", get(handle_css))
+        .route("/ws", get(ws_handler))
         .with_state(state);
     router
 }
@@ -54,4 +58,12 @@ async fn handle_javascript(State(_): State<AppState>) -> JavaScript<String> {
 async fn handle_css(State(_): State<AppState>) -> Css<String> {
     let str = include_str!("../html_src/style.css");
     Css(str.to_owned())
+}
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    let l = ws.on_upgrade(|socket| handle_socket(socket, state.clone()));
+    l
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState) {
+
 }
