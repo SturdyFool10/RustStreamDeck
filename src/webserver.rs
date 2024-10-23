@@ -1,4 +1,5 @@
 use crate::appstate::AppState;
+use crate::db::{self, Password};
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
 use axum::http::Response;
@@ -8,15 +9,22 @@ use axum::Router;
 use axum_extra::response::{Css, Html, JavaScript};
 use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
+use std::error::Error;
 use std::net::SocketAddr;
+use std::string::FromUtf8Error;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::Mutex;
+use tokio::time::{timeout, Timeout};
 use tracing::info;
 
 enum MessageTypes {
     Invalid,
-    Auth(String, String, String), //this one expects a username and a hashed password and salt
+    Auth(String, String), //this one expects a username and a hashed password
+    RequestSalt(String), //this one expects a username, if the username exists, it will return the salt, if it doesn't, it will return an error. you cannot hash a password correctly without the salt
+    CreateAccount(String, String, String), //this one expects a username and a hashed password and Salt, if there is no issue with the username, it will create the account then log into it
+    ChangePassword(String, String, String, String), //username, new password, salt, by the time this is returned the old password has already been checked
 }
 
 //this is the entry function for the file, as such, it will choose how everything works from the top, and is in charge of using the config to start a web server, it will not exit unless the start_server function does
@@ -76,8 +84,8 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl
 }
 #[derive(Clone)]
 pub struct SocketState {
-    pub authenticated: bool,
-    pub username: Option<String>,
+    pub authenticated: Arc<Mutex<bool>>,
+    pub username: Arc<Mutex<Option<String>>>,
     pub tx: Arc<Mutex<SplitSink<WebSocket, Message>>>,
     pub rx: Arc<Mutex<SplitStream<WebSocket>>>,
 }
@@ -85,8 +93,8 @@ pub struct SocketState {
 impl SocketState {
     pub fn new(rx: SplitStream<WebSocket>, tx: SplitSink<WebSocket, Message>) -> Self {
         Self {
-            authenticated: false,
-            username: None,
+            authenticated: Arc::new(Mutex::new(false)),
+            username: Arc::new(Mutex::new(None)),
             tx: Arc::new(Mutex::new(tx)),
             rx: Arc::new(Mutex::new(rx)),
         }
@@ -115,76 +123,403 @@ async fn handle_send_task(
     }
 }
 
+fn decode_string_from_buffer(buffer: &[u8]) -> Result<String, FromUtf8Error> {
+    // Extract the specified slice and attempt to convert it to a UTF-8 string
+    let string = String::from_utf8(buffer[0..].to_vec())?;
+
+    Ok(string)
+}
+
+async fn send_message_to_tx(socket: &SocketState, message: &str) {
+    // Send the message to the tx channel
+    let _ = socket
+        .tx
+        .lock()
+        .await
+        .send(Message::Text(message.to_string()))
+        .await;
+}
+//function to send a message to a socket
+async fn send_message_var_to_tx(socket: &SocketState, message: Message) {
+    // Send the message to the tx channel
+    let _ = socket.tx.lock().await.send(message).await;
+}
+
 async fn handle_recv_task(
     global_tx: Receiver<String>,
-    socket: SocketState,
+    mut socket: SocketState,
     id: usize,
     state: AppState,
 ) {
     //this function will be used to receive messages from the client and broadcast them to all clients
-    let mut reciever = socket.rx.lock().await; //this should be the only place we need the reciever, so there is no issue owning until disconnect.
-    while let Some(val) = reciever.next().await {
-        match val {
-            Ok(message) => {
-                //in here, we will expect the first two bytes to be 0x5F10, if not, respond with a message: "Invalid Message", our messages will then have an opcode, which is an 8 bit unsigned integer, followed by the message, messages are a binary format that are similar to how structs in
-                //C are represented in memory, this reduces the amount of data that needs to be sent, and allows for more complex messages to be sent
-                let message: MessageTypes = match message {
-                    Message::Text(text) => continue, //ignore text messages
-                    Message::Binary(bin) => {
-                        if bin.len() < 4 {
-                            //if the message is less than 4 bytes, it is invalid, respond with an error message
-
-                            let mut sender = socket.tx.lock().await;
-                            let message = Message::Text("Invalid Message".to_string());
-                            let _ = sender.send(message).await;
-                            continue;
-                        }
-                        //check header in first two bytes
-                        let header = bin[0] << 8 | bin[1];
-                        if header != 0x5F10 {
-                            let mut sender = socket.tx.lock().await;
-                            let message = Message::Text("Invalid Message".to_string());
-                            let _ = sender.send(message).await;
-                            continue;
-                        }
-                        //get opcode and take the rest of the message
-                        let opcode = bin[2];
-                        let message = &bin[3..];
-                        let to_ret: MessageTypes = match opcode {
-                            0 => {
-                                //this is a message to be broadcasted to all clients
-                                let message = String::from_utf8_lossy(message).to_string();
-                                let mut global_tx = state.tx.clone();
-                                let _ = global_tx.send(message).await;
-                                continue;
-                            }
-                            1 => {
-                                //this is a message to be sent to a specific client
-                                let message = String::from_utf8_lossy(message).to_string();
-                                message
-                            }
-                            _ => {
-                                //this is an invalid opcode, respond with an error message
-                                let mut sender = socket.tx.lock().await;
-                                let message = Message::Text("Invalid Message".to_string());
-                                let _ = sender.send(message).await;
-                                continue;
-                            }
-                        };
-                        to_ret
-                    }
-                    _ => continue, //ignore other message types
-                };
-            }
-            Err(_) => {
+    //wait for message
+    let socket_clone = socket.clone();
+    loop {
+        //wait for 10ms for a message, if not do nothing, will also let us disconnect if the client is disconnected
+        let mut rx = socket_clone.rx.lock().await;
+        let message: Message = match timeout(Duration::from_millis(10), rx.next()).await {
+            Ok(Some(Ok(message))) => message,
+            Ok(Some(Err(e))) => {
                 info!(
-                    "Socket ID: {} has disconnected, terminating listener loop",
-                    id
+                    "Socket ID: {} encountered an error while receiving a message: {}",
+                    id, e
                 );
-                break; //break out of the loop if the client is disconnected, no need to keep trying to receive messages
+                continue;
             }
+            Ok(None) => continue,
+            Err(_) => {
+                info!("Socket ID: {} has disconnected since last broadcast, terminating listener loop", id);
+                state.remove_socket(id).await;
+                break;
+            }
+        };
+        drop(rx); //drop the lock as soon as we can, we don't need it anymore
+                  //we are expecting all our messages in binary format, so we need to decode them, for starters there is a header taking two bytes, this is expected to be 0x5F10,
+                  //then there is an opcode which specifies type, this is 16 bytes, then the rest is up to the message type, all messages are in big endian
+        let message = match message {
+            Message::Binary(message) => message,
+            _ => {
+                send_message_to_tx(&socket, "Invalid Message").await;
+                continue;
+            }
+        };
+        //check header, make sure it is 0x5F10
+        if message[0] != 0x5F || message[1] != 0x10 {
+            send_message_to_tx(&socket, "Invalid Header").await;
+            continue;
+        }
+        //check opcode
+        let opcode: u16 = u16::from_be_bytes([message[2], message[3]]);
+        let message = &message[4..];
+        let message: MessageTypes =
+            check_message(opcode, message, id, socket.clone(), state.clone()).await;
+        match message {
+            MessageTypes::Auth(username, password_hash) => {
+                //user has already been checked, so we just need to verify the password
+                let auth = db::check_password(&state.db, username.as_str(), password_hash.as_str())
+                    .unwrap();
+                if auth {
+                    send_message_to_tx(&socket, "Authenticated").await;
+                    *socket.authenticated.lock().await = true;
+                    *socket.username.lock().await = Some(username);
+                } else {
+                    send_message_to_tx(&socket, "Incorrect Password").await;
+                }
+            }
+            MessageTypes::RequestSalt(username) => {
+                //client is asking for salt from the db, format of message will be salt as unicode
+                let salt = db::get_salt(&state.db, username.as_str()).unwrap();
+                let salt = salt.as_bytes();
+                let mut salt_message = vec![0x5F, 0x10];
+                let opcode = 1u16.to_be_bytes();
+                //add opcode
+                salt_message.extend_from_slice(&opcode);
+                //add salt
+                salt_message.extend_from_slice(salt);
+                let message = Message::Binary(salt_message);
+                send_message_var_to_tx(&socket, message).await;
+            }
+            MessageTypes::CreateAccount(username, password_hash, salt) => {
+                //client is asking to create an account, response will be success or failure, success authenticates the user
+                let password: Password = Password {
+                    hash: password_hash,
+                    salt,
+                };
+                let result = db::add_credentials(&state.db, username.as_str(), password);
+                let success = match result {
+                    Ok(_) => true,
+                    Err(_) => false,
+                };
+                if success {
+                    send_message_to_tx(&socket, "Account Created").await;
+                    *socket.authenticated.lock().await = true;
+                    *socket.username.lock().await = Some(username);
+                } else {
+                    send_message_to_tx(&socket, "Account Creation Failed").await;
+                }
+            }
+            MessageTypes::ChangePassword(username, old_hash, new_password_hash, salt) => {
+                //client is asking to change their password, response will be success or failure
+                let password: Password = Password {
+                    hash: new_password_hash,
+                    salt,
+                };
+                let result = db::change_password(&state.db, &username, &old_hash, password);
+                let success = match result {
+                    Ok(_) => true,
+                    Err(_) => false,
+                };
+                if success {
+                    send_message_to_tx(&socket, "Password Changed").await;
+                } else {
+                    send_message_to_tx(&socket, "Password Change Failed").await;
+                }
+            }
+            _ => (),
         }
     }
+}
+
+async fn check_message(
+    opcode: u16,
+    message: &[u8],
+    id: usize,
+    socket: SocketState,
+    state: AppState,
+) -> MessageTypes {
+    match opcode {
+        1 => {
+            //client is asking for salt from the db, format of message will be username as unicode
+            let username = match decode_string_from_buffer(message) {
+                Ok(username) => username,
+                Err(_) => {
+                    send_message_to_tx(&socket, "Invalid Username").await;
+                    return MessageTypes::Invalid;
+                }
+            };
+            //check if the username is in the database
+            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            if !user_exists {
+                send_message_to_tx(&socket, "User does not exist").await;
+                return MessageTypes::Invalid;
+            }
+            //create a message type variant and return it
+            MessageTypes::RequestSalt(username);
+        }
+        2 => {
+            //check if already authenticated, if so message the client and return invalid
+            if *socket.authenticated.lock().await {
+                send_message_to_tx(&socket, "Already Authenticated").await;
+                return MessageTypes::Invalid;
+            }
+            //client is sending a login request, format will be u64 username length, u64 password hash length, username, password hash
+            //check if the message is long enough to at least store the lengths
+            if message.len() < 16 {
+                send_message_to_tx(&socket, "Invalid Message").await;
+                return MessageTypes::Invalid;
+            }
+            //get the username length
+            let username_length: u64 = u64::from_be_bytes([
+                message[0], message[1], message[2], message[3], message[4], message[5], message[6],
+                message[7],
+            ]);
+            //get the password hash length
+            let password_hash_length: u64 = u64::from_be_bytes([
+                message[8],
+                message[9],
+                message[10],
+                message[11],
+                message[12],
+                message[13],
+                message[14],
+                message[15],
+            ]);
+            //get the rest of the message
+            let message = &message[16..];
+            //unicode decode the rest of the message
+            let message = match decode_string_from_buffer(message) {
+                Ok(message) => message,
+                Err(_) => {
+                    send_message_to_tx(&socket, "Invalid Message").await;
+                    return MessageTypes::Invalid;
+                }
+            };
+            //check if the message is long enough to store the username and password hash
+            if message.len() < (username_length + password_hash_length) as usize {
+                send_message_to_tx(&socket, "Invalid Message").await;
+                return MessageTypes::Invalid;
+            }
+            //get the username
+            let username = message[0..username_length as usize].to_string();
+            //get the password hash
+            let password_hash = message[username_length as usize..].to_string();
+            //check if the user exists
+            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            if !user_exists {
+                send_message_to_tx(&socket, "User does not exist").await;
+                return MessageTypes::Invalid;
+            }
+            //return the message type variant
+            MessageTypes::Auth(username, password_hash);
+        }
+        3 => {
+            //check if already authenticated, if so message the client and return invalid
+            if *socket.authenticated.lock().await {
+                send_message_to_tx(&socket, "Already Authenticated").await;
+                return MessageTypes::Invalid;
+            }
+            //client wants to make a new account, format will be u64 username length, u64 password hash length, u64 salt length, username, password hash, salt
+            //check if the message is long enough to at least store the lengths
+            if message.len() < 24 {
+                send_message_to_tx(&socket, "Invalid Message").await;
+                return MessageTypes::Invalid;
+            }
+            //get the username length
+            let username_length: u64 = u64::from_be_bytes([
+                message[0], message[1], message[2], message[3], message[4], message[5], message[6],
+                message[7],
+            ]);
+            //get the password hash length
+            let password_hash_length: u64 = u64::from_be_bytes([
+                message[8],
+                message[9],
+                message[10],
+                message[11],
+                message[12],
+                message[13],
+                message[14],
+                message[15],
+            ]);
+            //get the salt length
+            let salt_length: u64 = u64::from_be_bytes([
+                message[16],
+                message[17],
+                message[18],
+                message[19],
+                message[20],
+                message[21],
+                message[22],
+                message[23],
+            ]);
+            //get the rest of the message
+            let message = &message[24..];
+            //unicode decode the rest of the message
+            let message = match decode_string_from_buffer(message) {
+                Ok(message) => message,
+                Err(_) => {
+                    send_message_to_tx(&socket, "Invalid Message").await;
+                    return MessageTypes::Invalid;
+                }
+            };
+            //check if the message is long enough to store the username, password hash, and salt
+            if message.len() < (username_length + password_hash_length + salt_length) as usize {
+                send_message_to_tx(&socket, "Invalid Message").await;
+                return MessageTypes::Invalid;
+            }
+            //seperate the username, password hash, and salt, store as strings
+            let username: String = message[0..username_length as usize].to_string();
+            let password_hash: String = message[username_length as usize..].to_string();
+            let salt: String =
+                message[username_length as usize + password_hash_length as usize..].to_string();
+            //check if the user already exists
+            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            if user_exists {
+                send_message_to_tx(&socket, "User already exists").await;
+                return MessageTypes::Invalid;
+            }
+            //return the message type variant
+            MessageTypes::CreateAccount(username, password_hash, salt);
+        }
+        4 => {
+            //client wants to change their password, format will be u64 username length, u64 old password hash length, u64 password hash length, u64 new salt length, username, password hash, salt
+            //check if already authenticated, if not message the client and return invalid
+            if !*socket.authenticated.lock().await {
+                send_message_to_tx(&socket, "Not Authenticated").await;
+                return MessageTypes::Invalid;
+            }
+            //check if the message is long enough to at least store the lengths
+            if message.len() < 32 {
+                send_message_to_tx(&socket, "Invalid Message").await;
+                return MessageTypes::Invalid;
+            }
+            //get the username length
+            let username_length: u64 = u64::from_be_bytes([
+                message[0], message[1], message[2], message[3], message[4], message[5], message[6],
+                message[7],
+            ]);
+            //get the old password hash length
+            let old_password_hash_length: u64 = u64::from_be_bytes([
+                message[8],
+                message[9],
+                message[10],
+                message[11],
+                message[12],
+                message[13],
+                message[14],
+                message[15],
+            ]);
+            //get the new password hash length
+            let new_password_hash_length: u64 = u64::from_be_bytes([
+                message[16],
+                message[17],
+                message[18],
+                message[19],
+                message[20],
+                message[21],
+                message[22],
+                message[23],
+            ]);
+            //get the salt length
+            let salt_length: u64 = u64::from_be_bytes([
+                message[24],
+                message[25],
+                message[26],
+                message[27],
+                message[28],
+                message[29],
+                message[30],
+                message[31],
+            ]);
+            //get the rest of the message
+            let message = &message[32..];
+            //unicode decode the rest of the message
+            let message = match decode_string_from_buffer(message) {
+                Ok(message) => message,
+                Err(_) => {
+                    send_message_to_tx(&socket, "Invalid Message").await;
+                    return MessageTypes::Invalid;
+                }
+            };
+            //check if the message is long enough to store the username, old password hash, new password hash, and salt
+            if message.len()
+                < (username_length
+                    + old_password_hash_length
+                    + new_password_hash_length
+                    + salt_length) as usize
+            {
+                send_message_to_tx(&socket, "Invalid Message").await;
+                return MessageTypes::Invalid;
+            }
+            //seperate the username, old password hash, new password hash, and salt, store as strings
+            let username: String = message[0..username_length as usize].to_string();
+            let old_password_hash: String = message[username_length as usize
+                ..username_length as usize + old_password_hash_length as usize]
+                .to_string();
+            let new_password_hash: String = message[username_length as usize
+                + old_password_hash_length as usize
+                ..username_length as usize
+                    + old_password_hash_length as usize
+                    + new_password_hash_length as usize]
+                .to_string();
+            let salt: String = message[username_length as usize
+                + old_password_hash_length as usize
+                + new_password_hash_length as usize..]
+                .to_string();
+            //check if the user exists
+            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            if !user_exists {
+                send_message_to_tx(&socket, "User does not exist").await;
+                return MessageTypes::Invalid;
+            }
+            //check if the old password hash is correct
+            let old_password_hash_correct: bool =
+                db::check_password(&state.db, username.as_str(), old_password_hash.as_str())
+                    .unwrap();
+            if !old_password_hash_correct {
+                send_message_to_tx(&socket, "Old password is incorrect").await;
+                return MessageTypes::Invalid;
+            }
+            //return the message type variant
+            return MessageTypes::ChangePassword(
+                username,
+                old_password_hash,
+                new_password_hash,
+                salt,
+            );
+        }
+        _ => {}
+    }
+    MessageTypes::Invalid //default return
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {

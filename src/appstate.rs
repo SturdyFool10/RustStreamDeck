@@ -1,4 +1,5 @@
 use crate::{config::Config, webserver::SocketState};
+use sled::Db;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 
@@ -7,15 +8,17 @@ pub struct AppState {
     pub config: Arc<Mutex<Config>>,
     pub socket_state_list: Arc<Mutex<Vec<SocketState>>>,
     pub tx: broadcast::Sender<String>,
+    pub db: Db,
 }
 
 #[allow(dead_code)] //this is a state api, whether or not it gets used is irrelevant
 impl AppState {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, db: Db) -> Self {
         Self {
             config: Arc::new(Mutex::new(config)),
             socket_state_list: Arc::new(Mutex::new(Vec::new())),
             tx: broadcast::channel(10).0,
+            db,
         }
     }
 

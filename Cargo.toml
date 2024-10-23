@@ -16,6 +16,7 @@ prost = "0.13.3"
 axum = { version = "0.7.7", features = ["tracing", "ws", "macros"] }
 axum-extra = { version = "0.9.4", features = ["protobuf"] }
 tonic = "0.12.3"
+sled = { version = "0.34.7", features = ["compression", "no_logs"] }
 
 
 [build-dependencies]
