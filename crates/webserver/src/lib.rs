@@ -185,7 +185,7 @@ async fn handle_recv_task(
                 }
             }
             MessageTypes::RequestSalt(username) => {
-                //client is asking for salt from the db, format of message will be salt as unicode
+                //client is asking for salt from the db, format of message will be salt as Unicode
                 let salt = database::get_salt(&state.db, username.as_str()).unwrap();
                 let salt = salt.as_bytes();
                 let mut salt_message = vec![0x5F, 0x10];

@@ -40,7 +40,7 @@ pub fn init_config() -> Config {
             match res {
                 Ok(conf) => conf,
                 Err(e) => {
-                    error!("Error Interpreting Config: {}", e);
+                    error!("Error Interpreting config: {}", e);
                     panic!("{}", e); //something went wrong, there is no way to recover from this
                 }
             }

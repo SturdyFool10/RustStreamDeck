@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/Config",
-    "crates/FileHelpers",
+    "crates/config",
+    "crates/filehelpers",
     "crates/macros",
-    "crates/PrettyLogs",
-    "crates/AppState",
+    "crates/prettylogs",
+    "crates/appstate",
     "crates/StreamDeckReplacement",
-    "crates/Webserver",
+    "crates/webserver",
     "crates/database"
 ]
 
@@ -29,10 +29,10 @@ tonic = "0.12.3"
 sled = { version = "0.34.7", features = ["compression", "no_logs"] }
 
 # Local crates as dependencies
-Config = { path = "crates/Config" }
-FileHelpers = { path = "crates/FileHelpers" }
+Config = { path = "crates/config" }
+FileHelpers = { path = "crates/filehelpers" }
 macros = { path = "crates/macros" }
-PrettyLogs = { path = "crates/PrettyLogs" }
-AppState = { path = "crates/AppState" }
-Webserver = { path = "crates/Webserver" }
+PrettyLogs = { path = "crates/prettylogs" }
+AppState = { path = "crates/appstate" }
+Webserver = { path = "crates/webserver" }
 database = {path = "crates/database"}
