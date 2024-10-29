@@ -54,7 +54,7 @@ pub fn change_password(
     old_password: &str,
     new_password: Password,
 ) -> Result<bool, String> {
-    if !check_password(db, username, old_password).unwrap() {
+    if !check_password(db, username, old_password)? {
         return Ok(false);
     }
     let serialized = serde_json::to_string(&new_password).unwrap();
@@ -63,7 +63,7 @@ pub fn change_password(
 }
 //helper function to remove a user, returns Result<bool, String> and errors if the user does not exist, Ok(false) if the password is incorrect
 pub fn remove_user(db: &Db, username: &str, password: &str) -> Result<bool, String> {
-    if !check_password(db, username, password).unwrap() {
+    if !check_password(db, username, password)? {
         return Ok(false);
     }
     db.remove(username).unwrap();

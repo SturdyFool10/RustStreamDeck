@@ -19,7 +19,7 @@ and cheap replacement for the streamdeck.
 - Open Source
 - Easy to build
 - Panics only when something unrecoverable happens
-- Otherwize stable
+- Otherwise stable
 
 **TODO**
 -Program Website

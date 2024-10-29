@@ -86,7 +86,7 @@ async fn handle_send_task(
     mut global_tx: Receiver<String>,
     mut socket: AppState::SocketState,
     id: usize,
-    state: AppState::AppState,
+    _state: AppState::AppState,
 ) {
     //this function will be used to send messages to the client and exit if the client is disconnected
     while let Ok(val) = global_tx.recv().await {
@@ -127,16 +127,13 @@ async fn send_message_var_to_tx(socket: &AppState::SocketState, message: Message
 }
 
 async fn handle_recv_task(
-    global_tx: Receiver<String>,
+    _global_tx: Receiver<String>,
     mut socket: AppState::SocketState,
     id: usize,
     state: AppState::AppState,
 ) {
-    //this function will be used to receive messages from the client and broadcast them to all clients
-    //wait for message
     let socket_clone = socket.clone();
     loop {
-        //wait for 10ms for a message, if not do nothing, will also let us disconnect if the client is disconnected
         let mut rx = socket_clone.rx.lock().await;
         let message: Message = match timeout(Duration::from_millis(10), rx.next()).await {
             Ok(Some(Ok(message))) => message,
@@ -244,7 +241,7 @@ async fn handle_recv_task(
 async fn check_message(
     opcode: u16,
     message: &[u8],
-    id: usize,
+    _id: usize,
     socket: AppState::SocketState,
     state: AppState::AppState,
 ) -> MessageTypes {
@@ -377,7 +374,7 @@ async fn check_message(
                 send_message_to_tx(&socket, "Invalid Message").await;
                 return MessageTypes::Invalid;
             }
-            //seperate the username, password hash, and salt, store as strings
+            //separate the username, password hash, and salt, store as strings
             let username: String = message[0..username_length as usize].to_string();
             let password_hash: String = message[username_length as usize..].to_string();
             let salt: String =
@@ -461,7 +458,7 @@ async fn check_message(
                 send_message_to_tx(&socket, "Invalid Message").await;
                 return MessageTypes::Invalid;
             }
-            //seperate the username, old password hash, new password hash, and salt, store as strings
+            //separate the username, old password hash, new password hash, and salt, store as strings
             let username: String = message[0..username_length as usize].to_string();
             let old_password_hash: String = message[username_length as usize
                 ..username_length as usize + old_password_hash_length as usize]
@@ -521,8 +518,8 @@ async fn handle_socket(socket: WebSocket, state: AppState::AppState) {
     ));
     //wait for either to exit, then terminate the other
     let _ = tokio::select! {
-        _ = (&mut send_task) => recv_task.abort(),
-        _ = (&mut recv_task) => send_task.abort(),
+        _ = &mut send_task => recv_task.abort(),
+        _ = &mut recv_task => send_task.abort(),
     };
     //socket is now dead, remove it from the state
     state.remove_socket(id).await;
