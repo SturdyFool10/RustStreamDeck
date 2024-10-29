@@ -1,5 +1,3 @@
-use crate::appstate::AppState;
-use crate::db::{self, Password};
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
 use axum::http::Response;
@@ -18,6 +16,7 @@ use tokio::sync::broadcast::Receiver;
 use tokio::sync::Mutex;
 use tokio::time::{timeout, Timeout};
 use tracing::info;
+use database::Password;
 
 enum MessageTypes {
     Invalid,
@@ -28,7 +27,7 @@ enum MessageTypes {
 }
 
 //this is the entry function for the file, as such, it will choose how everything works from the top, and is in charge of using the config to start a web server, it will not exit unless the start_server function does
-pub async fn start_web_server(state: AppState) {
+pub async fn start_web_server(state: AppState::AppState) {
     let (interface_proper, interface_pretty, port) = get_config_values(state.clone()).await;
     info!("Starting web server on {}:{}", interface_pretty, port);
 
@@ -38,7 +37,7 @@ pub async fn start_web_server(state: AppState) {
 }
 
 //I've reworked the webserver a couple of times, these operations are consistently needed though, so I extracted it into a different function
-async fn get_config_values(state: AppState) -> (String, String, u16) {
+async fn get_config_values(state: AppState::AppState) -> (String, String, u16) {
     let config = state.config.lock().await; //config is inside an arc mutex, we need to lock it, this prevents other code that requires the config from running until we drop it
     let interface_proper = config.interface.clone();
     let interface_pretty = interface_proper.replace("0.0.0.0", "*"); //make the output more pretty, this is worth it, especially such a simple operation
@@ -48,14 +47,14 @@ async fn get_config_values(state: AppState) -> (String, String, u16) {
 }
 
 //the function below is an internal function to the file, no other files can rely on it, it shall not exit unless the webserver goes down
-async fn start_server(state: AppState, address: SocketAddr) {
+async fn start_server(state: AppState::AppState, address: SocketAddr) {
     let router: Router = create_router(state.clone());
 
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
     axum::serve(listener, router).await.unwrap();
 }
 
-fn create_router(state: AppState) -> Router {
+fn create_router(state: AppState::AppState) -> Router {
     let router: Router = Router::new()
         .route("/", get(handle_html))
         .route("/index.js", get(handle_javascript))
@@ -66,46 +65,28 @@ fn create_router(state: AppState) -> Router {
 }
 
 //the handlers below need no state, they just return their static files respectively
-async fn handle_html(State(_): State<AppState>) -> Html<String> {
+async fn handle_html(State(_): State<AppState::AppState>) -> Html<String> {
     let str = include_str!("../html_src/index.html");
     Html(str.to_owned())
 }
-async fn handle_javascript(State(_): State<AppState>) -> JavaScript<String> {
+async fn handle_javascript(State(_): State<AppState::AppState>) -> JavaScript<String> {
     let str = include_str!("../html_src/index.js");
     JavaScript(str.to_owned())
 }
-async fn handle_css(State(_): State<AppState>) -> Css<String> {
+async fn handle_css(State(_): State<AppState::AppState>) -> Css<String> {
     let str = include_str!("../html_src/style.css");
     Css(str.to_owned())
 }
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState::AppState>) -> impl IntoResponse {
     let l = ws.on_upgrade(move |socket| handle_socket(socket, state.clone()));
     l
-}
-#[derive(Clone)]
-pub struct SocketState {
-    pub authenticated: Arc<Mutex<bool>>,
-    pub username: Arc<Mutex<Option<String>>>,
-    pub tx: Arc<Mutex<SplitSink<WebSocket, Message>>>,
-    pub rx: Arc<Mutex<SplitStream<WebSocket>>>,
-}
-
-impl SocketState {
-    pub fn new(rx: SplitStream<WebSocket>, tx: SplitSink<WebSocket, Message>) -> Self {
-        Self {
-            authenticated: Arc::new(Mutex::new(false)),
-            username: Arc::new(Mutex::new(None)),
-            tx: Arc::new(Mutex::new(tx)),
-            rx: Arc::new(Mutex::new(rx)),
-        }
-    }
 }
 
 async fn handle_send_task(
     mut global_tx: Receiver<String>,
-    mut socket: SocketState,
+    mut socket: AppState::SocketState,
     id: usize,
-    state: AppState,
+    state: AppState::AppState,
 ) {
     //this function will be used to send messages to the client and exit if the client is disconnected
     while let Ok(val) = global_tx.recv().await {
@@ -130,7 +111,7 @@ fn decode_string_from_buffer(buffer: &[u8]) -> Result<String, FromUtf8Error> {
     Ok(string)
 }
 
-async fn send_message_to_tx(socket: &SocketState, message: &str) {
+async fn send_message_to_tx(socket: &AppState::SocketState, message: &str) {
     // Send the message to the tx channel
     let _ = socket
         .tx
@@ -140,16 +121,16 @@ async fn send_message_to_tx(socket: &SocketState, message: &str) {
         .await;
 }
 //function to send a message to a socket
-async fn send_message_var_to_tx(socket: &SocketState, message: Message) {
+async fn send_message_var_to_tx(socket: &AppState::SocketState, message: Message) {
     // Send the message to the tx channel
     let _ = socket.tx.lock().await.send(message).await;
 }
 
 async fn handle_recv_task(
     global_tx: Receiver<String>,
-    mut socket: SocketState,
+    mut socket: AppState::SocketState,
     id: usize,
-    state: AppState,
+    state: AppState::AppState,
 ) {
     //this function will be used to receive messages from the client and broadcast them to all clients
     //wait for message
@@ -174,8 +155,8 @@ async fn handle_recv_task(
             }
         };
         drop(rx); //drop the lock as soon as we can, we don't need it anymore
-                  //we are expecting all our messages in binary format, so we need to decode them, for starters there is a header taking two bytes, this is expected to be 0x5F10,
-                  //then there is an opcode which specifies type, this is 16 bytes, then the rest is up to the message type, all messages are in big endian
+        //we are expecting all our messages in binary format, so we need to decode them, for starters there is a header taking two bytes, this is expected to be 0x5F10,
+        //then there is an opcode which specifies type, this is 16 bytes, then the rest is up to the message type, all messages are in big endian
         let message = match message {
             Message::Binary(message) => message,
             _ => {
@@ -196,7 +177,7 @@ async fn handle_recv_task(
         match message {
             MessageTypes::Auth(username, password_hash) => {
                 //user has already been checked, so we just need to verify the password
-                let auth = db::check_password(&state.db, username.as_str(), password_hash.as_str())
+                let auth = database::check_password(&state.db, username.as_str(), password_hash.as_str())
                     .unwrap();
                 if auth {
                     send_message_to_tx(&socket, "Authenticated").await;
@@ -208,7 +189,7 @@ async fn handle_recv_task(
             }
             MessageTypes::RequestSalt(username) => {
                 //client is asking for salt from the db, format of message will be salt as unicode
-                let salt = db::get_salt(&state.db, username.as_str()).unwrap();
+                let salt = database::get_salt(&state.db, username.as_str()).unwrap();
                 let salt = salt.as_bytes();
                 let mut salt_message = vec![0x5F, 0x10];
                 let opcode = 1u16.to_be_bytes();
@@ -225,7 +206,7 @@ async fn handle_recv_task(
                     hash: password_hash,
                     salt,
                 };
-                let result = db::add_credentials(&state.db, username.as_str(), password);
+                let result = database::add_credentials(&state.db, username.as_str(), password);
                 let success = match result {
                     Ok(_) => true,
                     Err(_) => false,
@@ -244,7 +225,7 @@ async fn handle_recv_task(
                     hash: new_password_hash,
                     salt,
                 };
-                let result = db::change_password(&state.db, &username, &old_hash, password);
+                let result = database::change_password(&state.db, &username, &old_hash, password);
                 let success = match result {
                     Ok(_) => true,
                     Err(_) => false,
@@ -264,8 +245,8 @@ async fn check_message(
     opcode: u16,
     message: &[u8],
     id: usize,
-    socket: SocketState,
-    state: AppState,
+    socket: AppState::SocketState,
+    state: AppState::AppState,
 ) -> MessageTypes {
     match opcode {
         1 => {
@@ -278,7 +259,7 @@ async fn check_message(
                 }
             };
             //check if the username is in the database
-            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            let user_exists: bool = database::user_exists(&state.db, username.as_str());
             if !user_exists {
                 send_message_to_tx(&socket, "User does not exist").await;
                 return MessageTypes::Invalid;
@@ -334,7 +315,7 @@ async fn check_message(
             //get the password hash
             let password_hash = message[username_length as usize..].to_string();
             //check if the user exists
-            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            let user_exists: bool = database::user_exists(&state.db, username.as_str());
             if !user_exists {
                 send_message_to_tx(&socket, "User does not exist").await;
                 return MessageTypes::Invalid;
@@ -402,7 +383,7 @@ async fn check_message(
             let salt: String =
                 message[username_length as usize + password_hash_length as usize..].to_string();
             //check if the user already exists
-            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            let user_exists: bool = database::user_exists(&state.db, username.as_str());
             if user_exists {
                 send_message_to_tx(&socket, "User already exists").await;
                 return MessageTypes::Invalid;
@@ -473,9 +454,9 @@ async fn check_message(
             //check if the message is long enough to store the username, old password hash, new password hash, and salt
             if message.len()
                 < (username_length
-                    + old_password_hash_length
-                    + new_password_hash_length
-                    + salt_length) as usize
+                + old_password_hash_length
+                + new_password_hash_length
+                + salt_length) as usize
             {
                 send_message_to_tx(&socket, "Invalid Message").await;
                 return MessageTypes::Invalid;
@@ -488,22 +469,22 @@ async fn check_message(
             let new_password_hash: String = message[username_length as usize
                 + old_password_hash_length as usize
                 ..username_length as usize
-                    + old_password_hash_length as usize
-                    + new_password_hash_length as usize]
+                + old_password_hash_length as usize
+                + new_password_hash_length as usize]
                 .to_string();
             let salt: String = message[username_length as usize
                 + old_password_hash_length as usize
                 + new_password_hash_length as usize..]
                 .to_string();
             //check if the user exists
-            let user_exists: bool = db::user_exists(&state.db, username.as_str());
+            let user_exists: bool = database::user_exists(&state.db, username.as_str());
             if !user_exists {
                 send_message_to_tx(&socket, "User does not exist").await;
                 return MessageTypes::Invalid;
             }
             //check if the old password hash is correct
             let old_password_hash_correct: bool =
-                db::check_password(&state.db, username.as_str(), old_password_hash.as_str())
+                database::check_password(&state.db, username.as_str(), old_password_hash.as_str())
                     .unwrap();
             if !old_password_hash_correct {
                 send_message_to_tx(&socket, "Old password is incorrect").await;
@@ -522,9 +503,9 @@ async fn check_message(
     MessageTypes::Invalid //default return
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState) {
+async fn handle_socket(socket: WebSocket, state: AppState::AppState) {
     let (sender, recievr) = socket.split();
-    let socket_state = SocketState::new(recievr, sender);
+    let socket_state = AppState::SocketState::new(recievr, sender);
     let id: usize = state.add_socket(socket_state.clone()).await;
     let mut send_task = tokio::spawn(handle_send_task(
         state.tx.subscribe(),

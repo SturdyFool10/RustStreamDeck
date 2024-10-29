@@ -1,6 +1,9 @@
-use crate::{config::Config, webserver::SocketState};
+
+use Config::Config;
 use sled::Db;
 use std::sync::Arc;
+use axum::extract::ws::{Message, WebSocket};
+use futures::stream::{SplitSink, SplitStream};
 use tokio::sync::{broadcast, Mutex};
 
 #[derive(Clone)]
@@ -35,5 +38,23 @@ impl AppState {
 
     pub async fn broadcast(&self, message: String) {
         self.tx.send(message).unwrap();
+    }
+}
+#[derive(Clone)]
+pub struct SocketState {
+    pub authenticated: Arc<Mutex<bool>>,
+    pub username: Arc<Mutex<Option<String>>>,
+    pub tx: Arc<Mutex<SplitSink<WebSocket, Message>>>,
+    pub rx: Arc<Mutex<SplitStream<WebSocket>>>,
+}
+
+impl SocketState {
+    pub fn new(rx: SplitStream<WebSocket>, tx: SplitSink<WebSocket, Message>) -> Self {
+        Self {
+            authenticated: Arc::new(Mutex::new(false)),
+            username: Arc::new(Mutex::new(None)),
+            tx: Arc::new(Mutex::new(tx)),
+            rx: Arc::new(Mutex::new(rx)),
+        }
     }
 }

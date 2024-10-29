@@ -1,9 +1,19 @@
-[package]
-name = "StreamDeckReplacement"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
+members = [
+    "crates/Config",
+    "crates/FileHelpers",
+    "crates/macros",
+    "crates/PrettyLogs",
+    "crates/AppState",
+    "crates/StreamDeckReplacement",
+    "crates/Webserver",
+    "crates/database"
+]
 
-[dependencies]
+default-members = ["crates/StreamDeckReplacement"]
+
+[workspace.dependencies]
 serde = { version = "1.0.183", features = ["derive", "serde_derive"] }
 serde_json = { version = "1.0.105", features = ["float_roundtrip"] }
 tokio = { version = "1.40.0", features = ["full", "tracing"] }
@@ -18,6 +28,11 @@ axum-extra = { version = "0.9.4", features = ["protobuf"] }
 tonic = "0.12.3"
 sled = { version = "0.34.7", features = ["compression", "no_logs"] }
 
-
-[build-dependencies]
-tonic-build = "0.12.3"
+# Local crates as dependencies
+Config = { path = "crates/Config" }
+FileHelpers = { path = "crates/FileHelpers" }
+macros = { path = "crates/macros" }
+PrettyLogs = { path = "crates/PrettyLogs" }
+AppState = { path = "crates/AppState" }
+Webserver = { path = "crates/Webserver" }
+database = {path = "crates/database"}

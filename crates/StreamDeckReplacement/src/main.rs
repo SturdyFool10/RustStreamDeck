@@ -1,19 +1,11 @@
-mod appstate;
-mod config;
-mod db;
-mod files;
-mod logging;
-mod macros;
-mod webserver;
-
-use db::init_db;
+use database::init_db;
 use tokio::spawn;
 use tracing::*;
 
-use appstate::AppState;
-use config::init_config;
-use logging::init_logging;
-use webserver::start_web_server;
+use Config::init_config;
+use macros::spawn_tasks;
+use PrettyLogs::init_logging;
+use Webserver::start_web_server;
 
 /*
 Welcome to the Streamdeck replacement codebase. the goals of this code is to make a fast, easy
@@ -40,7 +32,7 @@ async fn main() {
     init_logging();
     let config = init_config();
     let db = init_db().await;
-    let state: AppState = AppState::new(config, db);
+    let state: AppState::AppState = AppState::AppState::new(config, db);
     let handles = spawn_tasks!(state, start_web_server);
     info!("Started {} tasks", handles.len());
     for handle in handles {
