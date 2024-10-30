@@ -16,8 +16,6 @@ tonic.workspace = true
 sled.workspace = true
 axum-extra.workspace = true
 
-Config.workspace = true
-FileHelpers.workspace = true
-PrettyLogs.workspace = true
+
 AppState.workspace = true
 database.workspace = true

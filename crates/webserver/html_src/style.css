@@ -2,12 +2,16 @@
     --pageBG: #0e0e0e;
     --textCol: #e5e5e5;
     --menuBG: #1d1d1d;
-    --highlightCol: #a200ff;
+    --highlightCol: #f700ff;
+    --highlightCol2: #03effc;
 }
 
 body {
+
     margin: 0;
     padding: 0;
+    width: 100%;
+    height: 100%;
     font-family: Arial, sans-serif;
     overflow: hidden;
     background-color: var(--pageBG);
@@ -108,4 +112,46 @@ h1 {
     top: 0px;
     left: 0px;
     z-index: 100;
+}
+
+.main-canvas {
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    position: relative;
+}
+.textbox-label {
+    display: flex;
+    align-items: center;
+    width: 100%; /* Ensures the container spans the full width of the parent */
+    color: var(--textCol);
+}
+.textbox-label .reqd-font-col {
+    margin-left: 0.25em; /* Adds a small space between text and asterisk */
+}
+
+.login-textbox {
+    position: relative;
+    pointer-events: auto;
+    flex: 1 auto; /* Makes the input fill remaining space */
+    min-width: 0; /* Prevents overflow issues */
+    max-width: 100%;
+    height: 10%;
+    background-color: var(--pageBG);
+    color: var(--textCol)
+}
+.reqd-font-col {
+    color: var(--highlightCol)
+}
+.login {
+    z-index: 0;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--menuBG);
+    width: calc(min(1vw, 1vh) * 90);
+    border-color: rgba(0, 0, 0, 0);
+    border-radius: 25px;
 }

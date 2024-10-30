@@ -2,13 +2,24 @@
 macro_rules! spawn_tasks {
     ($state:expr, $($task:expr),*) => {
         {
-            let handles: Vec<_> = vec![
+            // Create a fixed-size array of JoinHandle tasks
+            vec![
                 $(
-                    spawn($task($state.clone())),
+                    tokio::spawn($task($state.clone())),
                 )*
-            ];
-
-            handles
+            ]
         }
+    };
+}
+
+#[macro_export]
+macro_rules! await_any {
+    ($func:expr, $( $task:expr ),* ) => {
+        tokio::select! {
+            //add a branch for every task
+            $(
+                _ = $task => {$func()}
+            )*
+        }.await;
     };
 }

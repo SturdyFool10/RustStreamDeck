@@ -1,9 +1,9 @@
 use database::init_db;
-use tokio::spawn;
+use std::process::exit;
 use tracing::*;
 
+use macros::{await_any, spawn_tasks};
 use Config::init_config;
-use macros::spawn_tasks;
 use PrettyLogs::init_logging;
 use Webserver::start_web_server;
 
@@ -33,9 +33,12 @@ async fn main() {
     let config = init_config();
     let db = init_db().await;
     let state: AppState::AppState = AppState::AppState::new(config, db);
-    let handles = spawn_tasks!(state, start_web_server);
+    let mut handles = spawn_tasks!(state, start_web_server);
     info!("Started {} tasks", handles.len());
-    for handle in handles {
-        handle.await.expect("Task panicked");
-    }
+    await_any!(handle_panicked_task, &mut handles[0]);
+}
+
+async fn handle_panicked_task() {
+    error!("A task has panicked, exiting...");
+    exit(1);
 }

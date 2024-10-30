@@ -1,22 +1,16 @@
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
-use axum::http::Response;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
 use axum_extra::response::{Css, Html, JavaScript};
-use futures::stream::{SplitSink, SplitStream};
-use futures::{SinkExt, StreamExt};
-use std::error::Error;
-use std::net::SocketAddr;
-use std::string::FromUtf8Error;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::broadcast::Receiver;
-use tokio::sync::Mutex;
-use tokio::time::{timeout, Timeout};
-use tracing::info;
 use database::Password;
+use futures::{SinkExt, StreamExt};
+use std::time::Duration;
+use std::{net::SocketAddr, string::FromUtf8Error};
+use tokio::sync::broadcast::Receiver;
+use tokio::time::timeout;
+use tracing::info;
 
 enum MessageTypes {
     Invalid,
@@ -77,14 +71,17 @@ async fn handle_css(State(_): State<AppState::AppState>) -> Css<String> {
     let str = include_str!("../html_src/style.css");
     Css(str.to_owned())
 }
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState::AppState>) -> impl IntoResponse {
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState::AppState>,
+) -> impl IntoResponse {
     let l = ws.on_upgrade(move |socket| handle_socket(socket, state.clone()));
     l
 }
 
 async fn handle_send_task(
     mut global_tx: Receiver<String>,
-    mut socket: AppState::SocketState,
+    socket: AppState::SocketState,
     id: usize,
     _state: AppState::AppState,
 ) {
@@ -128,7 +125,7 @@ async fn send_message_var_to_tx(socket: &AppState::SocketState, message: Message
 
 async fn handle_recv_task(
     _global_tx: Receiver<String>,
-    mut socket: AppState::SocketState,
+    socket: AppState::SocketState,
     id: usize,
     state: AppState::AppState,
 ) {
@@ -146,14 +143,18 @@ async fn handle_recv_task(
             }
             Ok(None) => continue,
             Err(_) => {
-                info!("Socket ID: {} has disconnected since last broadcast, terminating listener loop", id);
-                state.remove_socket(id).await;
-                break;
+                continue;
             }
         };
         drop(rx); //drop the lock as soon as we can, we don't need it anymore
-        //we are expecting all our messages in binary format, so we need to decode them, for starters there is a header taking two bytes, this is expected to be 0x5F10,
-        //then there is an opcode which specifies type, this is 16 bytes, then the rest is up to the message type, all messages are in big endian
+                  //we are expecting all our messages in binary format, so we need to decode them, for starters there is a header taking two bytes, this is expected to be 0x5F10,
+                  //then there is an opcode which specifies type, this is 16 bytes, then the rest is up to the message type, all messages are in big endian
+                  //check if the message is empty text, this can be caused by the timeout running out of time, we do this to ensure mutexes are dropped often so other tasks only wait 10ms max
+        if let Message::Text(msg) = message.clone() {
+            if msg == "".to_string() {
+                continue;
+            }
+        }
         let message = match message {
             Message::Binary(message) => message,
             _ => {
@@ -174,8 +175,9 @@ async fn handle_recv_task(
         match message {
             MessageTypes::Auth(username, password_hash) => {
                 //user has already been checked, so we just need to verify the password
-                let auth = database::check_password(&state.db, username.as_str(), password_hash.as_str())
-                    .unwrap();
+                let auth =
+                    database::check_password(&state.db, username.as_str(), password_hash.as_str())
+                        .unwrap();
                 if auth {
                     send_message_to_tx(&socket, "Authenticated").await;
                     *socket.authenticated.lock().await = true;
@@ -451,9 +453,9 @@ async fn check_message(
             //check if the message is long enough to store the username, old password hash, new password hash, and salt
             if message.len()
                 < (username_length
-                + old_password_hash_length
-                + new_password_hash_length
-                + salt_length) as usize
+                    + old_password_hash_length
+                    + new_password_hash_length
+                    + salt_length) as usize
             {
                 send_message_to_tx(&socket, "Invalid Message").await;
                 return MessageTypes::Invalid;
@@ -466,8 +468,8 @@ async fn check_message(
             let new_password_hash: String = message[username_length as usize
                 + old_password_hash_length as usize
                 ..username_length as usize
-                + old_password_hash_length as usize
-                + new_password_hash_length as usize]
+                    + old_password_hash_length as usize
+                    + new_password_hash_length as usize]
                 .to_string();
             let salt: String = message[username_length as usize
                 + old_password_hash_length as usize
