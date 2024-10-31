@@ -7,7 +7,6 @@
 }
 
 body {
-
     margin: 0;
     padding: 0;
     width: 100%;
@@ -139,19 +138,41 @@ h1 {
     max-width: 100%;
     height: 10%;
     background-color: var(--pageBG);
-    color: var(--textCol)
+    color: var(--textCol);
 }
 .reqd-font-col {
-    color: var(--highlightCol)
+    color: var(--highlightCol);
 }
 .login {
+    width: calc(min(1vw, 1vh) * 90);
     z-index: 0;
     position: fixed;
-    top: 50%;
+    top: 30%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -75%);
     background-color: var(--menuBG);
-    width: calc(min(1vw, 1vh) * 90);
     border-color: rgba(0, 0, 0, 0);
     border-radius: 25px;
+}
+.loginbtn {
+    align-self: stretch; /* Makes button span full width within flex container */
+    padding: 0.75em;
+    background-color: var(--highlightCol);
+    color: var(--textCol);
+    text-decoration: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    text-align: center;
+    flex: 1 auto;
+}
+.login-header {
+    text-align: center;
+    color: var(--textCol);
+    font-size: 1.5em;
+    padding: 0.5em;
+}
+
+.loginbtn:hover {
+    background-color: var(--highlightCol2); /* Hover effect */
 }

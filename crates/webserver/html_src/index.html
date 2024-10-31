@@ -1,31 +1,47 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-  <head>
-    <title>
-        Sturdy's Web Streamdeck Replacement
-    </title>
-    <link rel="stylesheet" type="text/css" href="/style.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js" integrity="sha512-a+SUDuwNzXDvz4XrIcXHuCf089/iJAoN4lmrXJg18XnduKK6YlDHNRalv4yd1N40OKI80tFidF+rqTFKGPoWFQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  </head>
-  <body>
-    <div id="main-content" class="regular">
-      <dialog class="login">
-        <form>
-          <h2 class="login-header"></h2>
-          <label class="textbox-label">Username: <span class="reqd-font-col">*</span>
-            <input class="login-textbox login-username" autofocus required/>
-          </label>
-          <p></p>
-          <label class="textbox-label">Password: <span class="reqd-font-col">*</span>
-            <input class="login-textbox login-password" type="password" required/>
-          </label>
-          <a href="#" class="loginbtn">Sign in</a>
-          <br />
-          <p><span class="reqd-font-col">*: Required</span></p>
-        </form>
-      </dialog>
-    </div>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.0/jquery.min.js"></script>
-    <script src="/index.js"></script>
-  </body>
+    <head>
+        <title>Sturdy's Web Streamdeck Replacement</title>
+        <link rel="stylesheet" type="text/css" href="/style.css" />
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"
+            integrity="sha512-a+SUDuwNzXDvz4XrIcXHuCf089/iJAoN4lmrXJg18XnduKK6YlDHNRalv4yd1N40OKI80tFidF+rqTFKGPoWFQ=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
+    </head>
+    <body>
+        <div id="main-content" class="regular">
+            <dialog class="login">
+                <form>
+                    <h2 class="login-header">Please Sign in to Proceed</h2>
+                    <label class="textbox-label"
+                        >Username: <span class="reqd-font-col">*</span>
+                        <input
+                            class="login-textbox login-username"
+                            autofocus
+                            required
+                        />
+                    </label>
+                    <p></p>
+                    <label class="textbox-label"
+                        >Password: <span class="reqd-font-col">*</span>
+                        <input
+                            class="login-textbox login-password"
+                            type="password"
+                            required
+                        />
+                    </label>
+                    <br />
+                    <label class="textbox-label">
+                        <a href="#" class="loginbtn">Sign in</a>
+                    </label>
+                    <br />
+                    <p><span class="reqd-font-col">*: Required</span></p>
+                </form>
+            </dialog>
+        </div>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.0/jquery.min.js"></script>
+        <script src="/index.js"></script>
+    </body>
 </html>
