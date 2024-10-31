@@ -5,8 +5,36 @@ let g_canvas_state = {
   height: 0,
 };
 let socket = null;
-let salt_recv_handler = function () {
+let salt_recv_handler = function (data) {
   console.log("salt_recv_handler");
+  console.log(data);
+  //rest of the data is the salt in utf8
+  let salt = new TextDecoder().decode(data);
+  let passwordField = $(".login-password");
+  let usernameField = $(".login-username");
+  let password = passwordField.val();
+  let username = usernameField.val();
+  console.log("" + username + " " + password + " " + salt + "");
+  let hashed = hash_with_salt(password, salt);
+  let username_len = username.length;
+  let password_len = hashed.length;
+  let utf8_username = new TextEncoder().encode(username);
+  let utf8_password = new TextEncoder().encode(hashed);
+  let buffer = new ArrayBuffer(
+    20 + utf8_username.length + utf8_password.length,
+  );
+  let view = new DataView(buffer);
+  view.setUint16(0, 0x5f10, false);
+  view.setUint16(2, 0x0002, false);
+  view.setBigUint64(4, BigInt(username_len), false);
+  view.setBigUint64(12, BigInt(password_len), false);
+  let CredentialsUnion = new TextEncoder().encode(username + hashed);
+  for (let i = 0; i < CredentialsUnion.length; i++) {
+    view.setUint8(20 + i, CredentialsUnion[i]);
+  }
+  console.log("Sending login request");
+  console.log(buffer);
+  socket.send(buffer);
 };
 $(document).ready(main);
 
@@ -80,6 +108,37 @@ function resize_canvas() {
 
 function handleMessage(event) {
   console.log(event);
+  let data = event.data;
+  //check if data is a string or blob
+  console.log(typeof data);
+  if (typeof data === "string") {
+  } else if (data instanceof Blob) {
+    //blob should have header of 0x5f10, opcode, and then the rest of the data which is varied depending on what the opcode is
+    //read the whole packet into a buffer
+    let reader = new FileReader();
+    reader.onload = function (e) {
+      let buffer = e.target.result;
+      let view = new DataView(buffer);
+      let header = view.getUint16(0, false);
+      let opcode = view.getUint16(2, false);
+      if (header != 0x5f10) {
+        console.log("invalid header");
+        return;
+      }
+      console.log("got a blob");
+      let data = new Uint8Array(buffer, 4);
+      switch (opcode) {
+        case 0x0001:
+          salt_recv_handler(data);
+          break;
+        default:
+          console.log("unknown opcode");
+          break;
+      }
+    };
+    reader.readAsArrayBuffer(data);
+  }
+  console.log(data);
 }
 
 //returns a hashed password with fresh salt, if you are trying to hash a

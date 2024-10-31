@@ -10,7 +10,7 @@ use std::time::Duration;
 use std::{net::SocketAddr, string::FromUtf8Error};
 use tokio::sync::broadcast::Receiver;
 use tokio::time::timeout;
-use tracing::info;
+use tracing::{error, info};
 #[derive(Debug)]
 enum MessageTypes {
     Invalid,
@@ -295,7 +295,7 @@ async fn check_message(
             //client is sending a login request, format will be u64 username length, u64 password hash length, username, password hash
             //check if the message is long enough to at least store the lengths
             if message.len() < 16 {
-                send_message_to_tx(&socket, "Invalid Message").await;
+                send_message_to_tx(&socket, "Message is not long enough to store valid data").await;
                 return MessageTypes::Invalid;
             }
             //get the username length
@@ -320,13 +320,18 @@ async fn check_message(
             let message = match decode_string_from_buffer(message) {
                 Ok(message) => message,
                 Err(_) => {
-                    send_message_to_tx(&socket, "Invalid Message").await;
+                    send_message_to_tx(&socket, "Malformed UTF8").await;
                     return MessageTypes::Invalid;
                 }
             };
             //check if the message is long enough to store the username and password hash
             if message.len() < (username_length + password_hash_length) as usize {
-                send_message_to_tx(&socket, "Invalid Message").await;
+                send_message_to_tx(
+                    &socket,
+                    "Message promised more data than it had, Promised: {}, Had: {}",
+                )
+                .await;
+                error!("Message failed muster due to having less data than promised, Promised: {}, Delivered: {}", (username_length + password_hash_length), message.len());
                 return MessageTypes::Invalid;
             }
             //get the username
@@ -334,6 +339,10 @@ async fn check_message(
             //get the password hash
             let password_hash = message[username_length as usize..].to_string();
             //check if the user exists
+            info!(
+                "Attempting to authenticate user: {} with password hash: {}",
+                &username, &password_hash
+            );
             let user_exists: bool = database::user_exists(&state.db, username.as_str());
             if !user_exists {
                 send_message_to_tx(&socket, "User does not exist").await;
@@ -366,17 +375,32 @@ async fn check_message(
             if !done {
                 // Get username length
                 let username_length: u64 = u64::from_be_bytes([
-                    message[0], message[1], message[2], message[3], message[4], message[5], message[6], message[7],
+                    message[0], message[1], message[2], message[3], message[4], message[5],
+                    message[6], message[7],
                 ]);
 
                 // Get password hash length
                 let password_hash_length: u64 = u64::from_be_bytes([
-                    message[8], message[9], message[10], message[11], message[12], message[13], message[14], message[15],
+                    message[8],
+                    message[9],
+                    message[10],
+                    message[11],
+                    message[12],
+                    message[13],
+                    message[14],
+                    message[15],
                 ]);
 
                 // Get salt length
                 let salt_length: u64 = u64::from_be_bytes([
-                    message[16], message[17], message[18], message[19], message[20], message[21], message[22], message[23],
+                    message[16],
+                    message[17],
+                    message[18],
+                    message[19],
+                    message[20],
+                    message[21],
+                    message[22],
+                    message[23],
                 ]);
 
                 // Get the remaining message
@@ -395,7 +419,9 @@ async fn check_message(
                 // Proceed only if not done
                 if !done {
                     // Check if the message length is sufficient for username, password hash, and salt
-                    if message.len() < (username_length + password_hash_length + salt_length) as usize {
+                    if message.len()
+                        < (username_length + password_hash_length + salt_length) as usize
+                    {
                         send_message_to_tx(&socket, "Invalid Message").await;
                         done = true;
                     }
@@ -405,8 +431,11 @@ async fn check_message(
                 if !done {
                     // Extract username, password hash, and salt
                     let username = message[0..username_length as usize].to_string();
-                    let password_hash = message[username_length as usize..(username_length + password_hash_length) as usize].to_string();
-                    let salt = message[(username_length + password_hash_length) as usize..].to_string();
+                    let password_hash = message[username_length as usize
+                        ..(username_length + password_hash_length) as usize]
+                        .to_string();
+                    let salt =
+                        message[(username_length + password_hash_length) as usize..].to_string();
 
                     // Check if the user already exists in the database
                     if database::user_exists(&state.db, username.as_str()) {
@@ -542,7 +571,7 @@ async fn check_message(
             }
             result
         }
-        _ => {MessageTypes::Invalid}
+        _ => MessageTypes::Invalid,
     };
     ret
 }
