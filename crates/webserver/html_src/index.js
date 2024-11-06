@@ -40,29 +40,109 @@ $(document).ready(main);
 
 function main() {
   $(".login")[0].showModal();
-  prepare_modal();
+  prepare_modals();
   create_socket();
   resize_canvas();
   $(window).resize(resize_canvas);
   draw();
 }
 
-function prepare_modal() {
-  let modal = $(".login")[0];
-  let submitbtn = $(".loginbtn");
-  let usernameField = $(".login-username");
-  let passwordField = $(".login-password");
-  submitbtn.click(handle_login);
+function prepare_modals() {
+  let finalize_login_btn = $(".loginbtn");
+  finalize_login_btn.click(handle_login);
+  let move_to_signup_btn = $(".signupbtn");
+  $(move_to_signup_btn[0]).click(from_signin_to_signup);
+  let move_to_login = $(".open_login")[0];
+  $(move_to_login).click(from_signup_to_signin);
+  let finalize_signup_btn = $(".create_user")[0];
+  $(finalize_signup_btn).click(handle_signup);
+}
+
+function handle_signup(e) {
+  let usernameField = $(".signup-username");
+  let passwordField = $(".signup-password");
+  let confirmField = $(".signup-confirm");
+  //if either field is empty return, also return if the password does not match the confirm password
+  let password = passwordField.val();
+  let confirm = confirmField.val();
+  let username = usernameField.val();
+  if (username === "" || password === "" || confirm === "") {
+    return;
+  }
+  console.log(`Password: ${password}, Confirm: ${confirm}`);
+  if (password != confirm) {
+    alert("Password does not match confirm password field");
+    return;
+  }
+  if (username.includes(" ")) {
+    alert("Username is invalid due to a space.");
+    return;
+  }
+  //we need to empty the modal fields
+  usernameField.val("");
+  passwordField.val("");
+  confirmField.val("");
+  //generate salt for the password
+  let result = hash_password(password);
+  let salt = result.salt;
+  let hashed = result.key;
+  let credentials = username + hashed + salt;
+  let CredentialsUnion = new TextEncoder().encode(credentials);
+  //u16 header, u16 opcode, u64 username length, u64 password length, u64 salt length, username data, password data, salt data
+  let buffer = new ArrayBuffer(28 + CredentialsUnion.length);
+  let view = new DataView(buffer);
+  view.setUint16(0, 0x5f10, false);
+  view.setUint16(2, 0x0003, false);
+  console.log(username);
+  console.log(hashed);
+  console.log(salt);
+  view.setBigUint64(4, BigInt(username.length), false);
+  view.setBigUint64(12, BigInt(hashed.length), false);
+  view.setBigUint64(20, BigInt(salt.length), false);
+  for (let i = 0; i < CredentialsUnion.length; i++) {
+    console.log(
+      `${i} / ${CredentialsUnion.length} (${(i / CredentialsUnion.length) * 100})`,
+    );
+    view.setUint8(28 + i, CredentialsUnion[i]);
+  }
+  console.log("Sending signup request");
+  console.log(buffer);
+  socket.send(buffer);
+}
+
+function from_signup_to_signin(e) {
+  if (e.button !== 0) {
+    return;
+  }
+  let signupModal = $(".signup")[0];
+  signupModal.close();
+  let loginModal = $(".login")[0];
+  loginModal.showModal();
+}
+
+function from_signin_to_signup(e) {
+  if (e.button !== 0) {
+    return;
+  }
+  let loginModal = $(".login")[0];
+  loginModal.close();
+  let signupModal = $(".signup")[0];
+  signupModal.showModal();
 }
 
 function handle_login(e) {
   //guard clause returns if not left click
-  if (e.button != 0) {
+  if (e.button !== 0) {
     return;
   }
   let usernameField = $(".login-username");
   let passwordField = $(".login-password");
+  let password = passwordField.val();
   let username = usernameField.val();
+  //if either field is empty return, also return if the username contains a space
+  if (username === "" || password === "") {
+    return;
+  }
   if (socket == null) {
     return;
   }
@@ -110,7 +190,6 @@ function handleMessage(event) {
   console.log(event);
   let data = event.data;
   //check if data is a string or blob
-  console.log(typeof data);
   if (typeof data === "string") {
   } else if (data instanceof Blob) {
     //blob should have header of 0x5f10, opcode, and then the rest of the data which is varied depending on what the opcode is
@@ -121,11 +200,9 @@ function handleMessage(event) {
       let view = new DataView(buffer);
       let header = view.getUint16(0, false);
       let opcode = view.getUint16(2, false);
-      if (header != 0x5f10) {
-        console.log("invalid header");
+      if (header !== 0x5f10) {
         return;
       }
-      console.log("got a blob");
       let data = new Uint8Array(buffer, 4);
       switch (opcode) {
         case 0x0001:

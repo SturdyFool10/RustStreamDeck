@@ -2,8 +2,8 @@
     --pageBG: #0e0e0e;
     --textCol: #e5e5e5;
     --menuBG: #1d1d1d;
-    --highlightCol: #f700ff;
-    --highlightCol2: #03effc;
+    --highlightCol: #a100ff;
+    --highlightCol2: #03c2fc;
 }
 
 body {
@@ -141,7 +141,7 @@ h1 {
     color: var(--textCol);
 }
 .reqd-font-col {
-    color: var(--highlightCol);
+    color: var(--highlightCol2);
 }
 .login {
     width: calc(min(1vw, 1vh) * 90);
@@ -154,10 +154,37 @@ h1 {
     border-color: rgba(0, 0, 0, 0);
     border-radius: 25px;
 }
-.loginbtn {
+
+.signup {
+    width: calc(min(1vw, 1vh) * 90);
+    z-index: 0;
+    position: fixed;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, -75%);
+    background-color: var(--menuBG);
+    border-color: rgba(0, 0, 0, 0);
+    border-radius: 25px;
+}
+
+.dialoguebtnprimary {
     align-self: stretch; /* Makes button span full width within flex container */
     padding: 0.75em;
     background-color: var(--highlightCol);
+    outline: 3px solid var(--highlightCol);
+    color: var(--textCol);
+    text-decoration: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    text-align: center;
+    flex: 1 auto;
+}
+.dialoguebtnsecondary {
+    align-self: stretch; /* Makes button span full width within flex container */
+    padding: 0.75em;
+    background-color: var(--menuBG);
+    outline: 3px solid var(--highlightCol);
     color: var(--textCol);
     text-decoration: none;
     border-radius: 5px;
@@ -172,7 +199,16 @@ h1 {
     font-size: 1.5em;
     padding: 0.5em;
 }
+.login-buttons {
+    gap: 0.25em;
+}
 
-.loginbtn:hover {
+.dialoguebtnprimary:hover {
+    outline: 3px solid var(--highlightCol2);
+    background-color: var(--highlightCol2); /* Hover effect */
+}
+
+.dialoguebtnsecondary:hover {
+    outline: 3px solid var(--highlightCol2);
     background-color: var(--highlightCol2); /* Hover effect */
 }

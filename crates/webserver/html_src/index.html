@@ -15,8 +15,8 @@
             <dialog class="login">
                 <form>
                     <h2 class="login-header">Please Sign in to Proceed</h2>
-                    <label class="textbox-label"
-                        >Username: <span class="reqd-font-col">*</span>
+                    <label class="textbox-label">
+                        Username: <span class="reqd-font-col">*</span>
                         <input
                             class="login-textbox login-username"
                             autofocus
@@ -24,8 +24,8 @@
                         />
                     </label>
                     <p></p>
-                    <label class="textbox-label"
-                        >Password: <span class="reqd-font-col">*</span>
+                    <label class="textbox-label">
+                        Password: <span class="reqd-font-col">*</span>
                         <input
                             class="login-textbox login-password"
                             type="password"
@@ -33,11 +33,61 @@
                         />
                     </label>
                     <br />
-                    <label class="textbox-label">
-                        <a href="#" class="loginbtn">Sign in</a>
+                    <label class="textbox-label login-buttons">
+                        <a href="#" class="dialoguebtnprimary loginbtn"
+                            >Sign In</a
+                        >
+                    </label>
+                    <br />
+                    <label class="textbox-label login-buttons">
+                        <a href="#" class="dialoguebtnsecondary signupbtn"
+                            >Sign Up</a
+                        >
                     </label>
                     <br />
                     <p><span class="reqd-font-col">*: Required</span></p>
+                </form>
+            </dialog>
+            <dialog class="signup">
+                <form>
+                    <h2 class="login-header">Sign up</h2>
+                    <label class="textbox-label">
+                        Username: <span class="reqd-font-col">*</span>
+                        <input
+                            class="login-textbox signup-username"
+                            required
+                            autofocus
+                        />
+                    </label>
+                    <br />
+                    <label class="textbox-label">
+                        Password: <span class="reqd-font-col">*</span>
+                        <input
+                            class="login-textbox signup-password"
+                            type="password"
+                            required
+                        />
+                    </label>
+                    <label class="textbox-label">
+                        Repeat Password: <span class="reqd-font-col">*</span>
+                        <input
+                            class="login-textbox signup-confirm"
+                            type="password"
+                            required
+                        />
+                    </label>
+                    <br />
+                    <label class="textbox-label login-buttons">
+                        <a href="#" class="dialoguebtnprimary create_user"
+                            >Sign Up</a
+                        >
+                    </label>
+                    <br />
+                    <label class="textbox-label login-buttons">
+                        <a href="#" class="dialoguebtnsecondary open_login"
+                            >Sign In</a
+                        >
+                    </label>
                 </form>
             </dialog>
         </div>

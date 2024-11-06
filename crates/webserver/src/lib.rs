@@ -128,6 +128,28 @@ async fn send_binary_message_to_tx(socket: &AppState::SocketState, message: &[u8
         .await;
 }
 
+
+
+//helper function to de-duplicate code for sending a result packet
+async fn send_result_packet(socket: AppState::SocketState, msg: String) {
+    let mut tx = socket.tx.lock().await;
+    let mut buffer: Vec<u8> = vec![0x5F, 0x10];
+    let opcode = u16::to_be_bytes(0x02u16);
+    let msg_len = u64::to_be_bytes(msg.len() as u64);
+    let msg_bytes = &msg.as_bytes();
+    buffer.extend_from_slice(&opcode);
+    buffer.extend_from_slice(&msg_len);
+    buffer.extend_from_slice(&msg_bytes);
+    let res = tx.send(Message::Binary(buffer)).await;
+    match res {
+        Ok(_) => (),
+        Err(_) => {}
+    }
+}
+
+
+
+
 async fn handle_recv_task(
     _global_tx: Receiver<String>,
     socket: AppState::SocketState,
@@ -144,10 +166,10 @@ async fn handle_recv_task(
                     "Socket ID: {} encountered an error while receiving a message: {}",
                     id, e
                 );
-                continue;
+                break;
             }
             Ok(None) => continue,
-            Err(_) => {
+            Err(_val) => {
                 continue;
             }
         };
@@ -163,13 +185,13 @@ async fn handle_recv_task(
         let message = match message {
             Message::Binary(message) => message,
             _ => {
-                send_message_to_tx(&socket, "Invalid Message").await;
+                send_result_packet(socket.clone(), "invalid".to_string()).await;
                 continue;
             }
         };
         //check header, make sure it is 0x5F10
         if message[0] != 0x5F || message[1] != 0x10 {
-            send_message_to_tx(&socket, "Invalid Header").await;
+            send_result_packet(socket.clone(), "invalid".to_string()).await;
             continue;
         }
         //check opcode
@@ -186,11 +208,11 @@ async fn handle_recv_task(
                     database::check_password(&state.db, username.as_str(), password_hash.as_str())
                         .unwrap();
                 if auth {
-                    send_message_to_tx(&socket, "Authenticated").await;
+                    send_result_packet(socket.clone(), "authed".to_string()).await;
                     *socket.authenticated.lock().await = true;
                     *socket.username.lock().await = Some(username);
                 } else {
-                    send_message_to_tx(&socket, "Incorrect Password").await;
+                    send_result_packet(socket.clone(), "Incorrect Password".to_string()).await
                 }
             }
             MessageTypes::RequestSalt(username) => {
@@ -203,8 +225,6 @@ async fn handle_recv_task(
                 salt_message.extend_from_slice(&opcode);
                 //add salt
                 salt_message.extend_from_slice(salt);
-                //convert all nums to text and print them out
-                let bytes: &[u8] = &salt_message;
                 send_binary_message_to_tx(&socket, &salt_message).await;
             }
             MessageTypes::CreateAccount(username, password_hash, salt) => {
@@ -219,11 +239,11 @@ async fn handle_recv_task(
                     Err(_) => false,
                 };
                 if success {
-                    send_message_to_tx(&socket, "Account Created").await;
+                    send_result_packet(socket.clone(), "acct_created".to_string()).await;
                     *socket.authenticated.lock().await = true;
                     *socket.username.lock().await = Some(username);
                 } else {
-                    send_message_to_tx(&socket, "Account Creation Failed").await;
+                    send_result_packet(socket.clone(), "acct_gen_fail".to_string()).await
                 }
             }
             MessageTypes::ChangePassword(username, old_hash, new_password_hash, salt) => {
@@ -238,9 +258,9 @@ async fn handle_recv_task(
                     Err(_) => false,
                 };
                 if success {
-                    send_message_to_tx(&socket, "Password Changed").await;
+                    send_result_packet(socket.clone(), "pass_chngd".to_string()).await
                 } else {
-                    send_message_to_tx(&socket, "Password Change Failed").await;
+                    send_result_packet(socket.clone(), "pass_chng_fail".to_string()).await
                 }
             }
             _ => (),
@@ -260,12 +280,10 @@ async fn check_message(
             let mut result: MessageTypes = MessageTypes::Invalid;
             let mut done = false;
             //client is asking for salt from the db, format of message will be username as unicode
-            info!("Client asked for salt");
             let username = match decode_string_from_buffer(message) {
                 Ok(username) => username,
                 Err(_) => {
-                    send_message_to_tx(&socket, "Invalid Username").await;
-                    info!("Socket asked for invalid username");
+                    send_result_packet(socket.clone(), "invalid".to_string()).await;
                     done = true;
                     "".to_owned()
                 }
@@ -274,8 +292,7 @@ async fn check_message(
                 //check if the username is in the database
                 let user_exists: bool = database::user_exists(&state.db, username.as_str());
                 if !user_exists {
-                    send_message_to_tx(&socket, "User does not exist").await;
-                    info!("Socket asked for nonexistent user");
+                    send_result_packet(socket.clone(), "invalid".to_string()).await;
                     done = true;
                 }
                 //create a message type variant and return it
@@ -289,13 +306,13 @@ async fn check_message(
         2 => {
             //check if already authenticated, if so message the client and return invalid
             if *socket.authenticated.lock().await {
-                send_message_to_tx(&socket, "Already Authenticated").await;
+                send_result_packet(socket.clone(), "err_already_authenticated".to_string()).await;
                 return MessageTypes::Invalid;
             }
             //client is sending a login request, format will be u64 username length, u64 password hash length, username, password hash
             //check if the message is long enough to at least store the lengths
             if message.len() < 16 {
-                send_message_to_tx(&socket, "Message is not long enough to store valid data").await;
+                send_result_packet(socket.clone(), "invalid".to_string()).await;
                 return MessageTypes::Invalid;
             }
             //get the username length
@@ -320,18 +337,13 @@ async fn check_message(
             let message = match decode_string_from_buffer(message) {
                 Ok(message) => message,
                 Err(_) => {
-                    send_message_to_tx(&socket, "Malformed UTF8").await;
+                    send_result_packet(socket.clone(), "invalid".to_string()).await;
                     return MessageTypes::Invalid;
                 }
             };
             //check if the message is long enough to store the username and password hash
-            if message.len() < (username_length + password_hash_length) as usize {
-                send_message_to_tx(
-                    &socket,
-                    "Message promised more data than it had, Promised: {}, Had: {}",
-                )
-                .await;
-                error!("Message failed muster due to having less data than promised, Promised: {}, Delivered: {}", (username_length + password_hash_length), message.len());
+            if message.len() != (username_length + password_hash_length) as usize {
+                send_result_packet(socket.clone(), "invalid".to_string()).await;
                 return MessageTypes::Invalid;
             }
             //get the username
@@ -339,13 +351,9 @@ async fn check_message(
             //get the password hash
             let password_hash = message[username_length as usize..].to_string();
             //check if the user exists
-            info!(
-                "Attempting to authenticate user: {} with password hash: {}",
-                &username, &password_hash
-            );
             let user_exists: bool = database::user_exists(&state.db, username.as_str());
             if !user_exists {
-                send_message_to_tx(&socket, "User does not exist").await;
+                send_result_packet(socket.clone(), "invalid".to_string()).await;
                 return MessageTypes::Invalid;
             }
             //return the message type variant
@@ -358,7 +366,7 @@ async fn check_message(
 
             // Check if already authenticated
             if *socket.authenticated.lock().await {
-                send_message_to_tx(&socket, "Already Authenticated").await;
+                send_result_packet(socket.clone(), "err_already_authenticated".to_string()).await;
                 done = true;
             }
 
@@ -366,7 +374,7 @@ async fn check_message(
             if !done {
                 // Check message length to contain at least the lengths
                 if message.len() < 24 {
-                    send_message_to_tx(&socket, "Invalid Message").await;
+                    send_result_packet(socket.clone(), "invalid".to_string()).await;
                     done = true;
                 }
             }
@@ -410,7 +418,7 @@ async fn check_message(
                 let message = match decode_string_from_buffer(message) {
                     Ok(decoded_message) => decoded_message,
                     Err(_) => {
-                        send_message_to_tx(&socket, "Invalid Message").await;
+                        send_result_packet(socket.clone(), "invalid".to_string()).await;
                         done = true;
                         String::new() // Default empty string in case of error
                     }
@@ -422,7 +430,7 @@ async fn check_message(
                     if message.len()
                         < (username_length + password_hash_length + salt_length) as usize
                     {
-                        send_message_to_tx(&socket, "Invalid Message").await;
+                        send_result_packet(socket.clone(), "invalid".to_string()).await;
                         done = true;
                     }
                 }
@@ -439,7 +447,7 @@ async fn check_message(
 
                     // Check if the user already exists in the database
                     if database::user_exists(&state.db, username.as_str()) {
-                        send_message_to_tx(&socket, "User already exists").await;
+                        send_result_packet(socket.clone(), "err_username_taken".to_string()).await;
                         done = true;
                     } else {
                         // If everything is valid, set the return message type
@@ -457,12 +465,12 @@ async fn check_message(
             //client wants to change their password, format will be u64 username length, u64 old password hash length, u64 password hash length, u64 new salt length, username, password hash, salt
             //check if already authenticated, if not message the client and return invalid
             if !*socket.authenticated.lock().await {
-                send_message_to_tx(&socket, "Not Authenticated").await;
+                send_result_packet(socket.clone(), "err_not_authorized".to_string()).await;
                 done = true;
             }
             //check if the message is long enough to at least store the lengths
             if message.len() < 32 && !done {
-                send_message_to_tx(&socket, "Invalid Message").await;
+                send_result_packet(socket.clone(), "invalid".to_string()).await;
                 done = true;
             }
             if !done {
@@ -510,7 +518,7 @@ async fn check_message(
                 let message = match decode_string_from_buffer(message) {
                     Ok(message) => message,
                     Err(_) => {
-                        send_message_to_tx(&socket, "Invalid Message").await;
+                        send_result_packet(socket.clone(), "invalid".to_string()).await;
 
                         done = true;
                         "".to_string()
@@ -524,7 +532,7 @@ async fn check_message(
                         + salt_length) as usize
                     && !done
                 {
-                    send_message_to_tx(&socket, "Invalid Message").await;
+                    send_result_packet(socket.clone(), "invalid".to_string()).await;
                     done = true;
                 }
                 //separate the username, old password hash, new password hash, and salt, store as strings
@@ -545,7 +553,7 @@ async fn check_message(
                 //check if the user exists
                 let user_exists: bool = database::user_exists(&state.db, username.as_str());
                 if !user_exists && !done {
-                    send_message_to_tx(&socket, "User does not exist").await;
+                    send_result_packet(socket.clone(), "invalid".to_string()).await;
                     done = true;
                 }
                 //check if the old password hash is correct
@@ -556,7 +564,7 @@ async fn check_message(
                 )
                 .unwrap();
                 if !old_password_hash_correct && !done {
-                    send_message_to_tx(&socket, "Old password is incorrect").await;
+                    send_result_packet(socket.clone(), "err_incorrect_password".to_string()).await;
                     done = true;
                 }
                 //return the message type variant
@@ -597,6 +605,5 @@ async fn handle_socket(socket: WebSocket, state: AppState::AppState) {
         _ = &mut send_task => recv_task.abort(),
         _ = &mut recv_task => send_task.abort(),
     };
-    //socket is now dead, remove it from the state
     state.remove_socket(id).await;
 }

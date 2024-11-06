@@ -3,6 +3,7 @@ use futures::stream::{SplitSink, SplitStream};
 use sled::Db;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
+use tracing::info;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -31,7 +32,9 @@ impl AppState {
 
     pub async fn remove_socket(&self, index: usize) {
         let mut list = self.socket_state_list.lock().await;
-        if !(index < list.len()) {
+        info!("removing socket {} from list", index);
+        if index > list.len() - 1 {
+            info!("Failed removing socket id: {}, this can leave us with phantom sockets!", index);
             return;
         } else {
             list.remove(index);
