@@ -128,8 +128,6 @@ async fn send_binary_message_to_tx(socket: &AppState::SocketState, message: &[u8
         .await;
 }
 
-
-
 //helper function to de-duplicate code for sending a result packet
 async fn send_result_packet(socket: AppState::SocketState, msg: String) {
     let mut tx = socket.tx.lock().await;
@@ -146,9 +144,6 @@ async fn send_result_packet(socket: AppState::SocketState, msg: String) {
         Err(_) => {}
     }
 }
-
-
-
 
 async fn handle_recv_task(
     _global_tx: Receiver<String>,
@@ -240,6 +235,7 @@ async fn handle_recv_task(
                 };
                 if success {
                     send_result_packet(socket.clone(), "acct_created".to_string()).await;
+                    send_result_packet(socket.clone(), "authed".to_string()).await;
                     *socket.authenticated.lock().await = true;
                     *socket.username.lock().await = Some(username);
                 } else {

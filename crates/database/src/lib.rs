@@ -12,18 +12,6 @@ pub struct Password {
 pub async fn init_db() -> Db {
     //initialize sled db
     let db = sled::open("auth").unwrap();
-    //check if the db is empty
-    if db.is_empty() {
-        //if it is, create a new password
-        let password = Password {
-            salt: "salt".to_string(),
-            hash: "hash".to_string(),
-        };
-        //serialize the password
-        let serialized = serde_json::to_string(&password).unwrap();
-        //insert the password into the db
-        db.insert("username", serialized.as_bytes()).unwrap();
-    }
     db
 }
 //helper function to check if a user exists, returns true or false

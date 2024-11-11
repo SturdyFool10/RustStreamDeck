@@ -5,6 +5,7 @@ let g_canvas_state = {
   height: 0,
 };
 let socket = null;
+let authed = false;
 let salt_recv_handler = function (data) {
   console.log("salt_recv_handler");
   console.log(data);
@@ -208,6 +209,9 @@ function handleMessage(event) {
         case 0x0001:
           salt_recv_handler(data);
           break;
+        case 0x0002:
+          results_handler(data);
+          break;
         default:
           console.log("unknown opcode");
           break;
@@ -216,6 +220,26 @@ function handleMessage(event) {
     reader.readAsArrayBuffer(data);
   }
   console.log(data);
+}
+
+function results_handler(data) {
+  //result packets are expected to be in big endian, and be in format: u64 length, message
+  let view = new DataView(data.buffer);
+  let length = view.getBigUint64(0, false);
+  let message = new TextDecoder().decode(data.slice(8));
+  switch (message) {
+    case "acct_created":
+      alert("your account was created successfully!");
+      break;
+    case "authed":
+      //close all modals
+      let modals = $("dialog");
+      for (var i = 0; i < modals.length; ++i) {
+        modals[i].close();
+      }
+      authed = true;
+      break;
+  }
 }
 
 //returns a hashed password with fresh salt, if you are trying to hash a
