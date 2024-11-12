@@ -52,6 +52,8 @@ fn create_router(state: AppState::AppState) -> Router {
     let router: Router = Router::new()
         .route("/", get(handle_html))
         .route("/index.js", get(handle_javascript))
+        .route("/crypto.js", get(handle_crypto))
+        .route("/jquery.js", get(handle_jquery))
         .route("/style.css", get(handle_css))
         .route("/ws", get(ws_handler))
         .with_state(state);
@@ -65,6 +67,14 @@ async fn handle_html(State(_): State<AppState::AppState>) -> Html<String> {
 }
 async fn handle_javascript(State(_): State<AppState::AppState>) -> JavaScript<String> {
     let str = include_str!("../html_src/index.js");
+    JavaScript(str.to_owned())
+}
+async fn handle_crypto(State(_): State<AppState::AppState>) -> JavaScript<String> {
+    let str = include_str!("../html_src/crypto.min.js");
+    JavaScript(str.to_owned())
+}
+async fn handle_jquery(State(_): State<AppState::AppState>) -> JavaScript<String> {
+    let str = include_str!("../html_src/jquery.min.js");
     JavaScript(str.to_owned())
 }
 async fn handle_css(State(_): State<AppState::AppState>) -> Css<String> {
