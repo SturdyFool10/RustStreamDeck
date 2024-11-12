@@ -8,7 +8,7 @@ members = [
     "crates/appstate",
     "crates/StreamDeckReplacement",
     "crates/webserver",
-    "crates/database"
+    "crates/database",
 ]
 
 default-members = ["crates/StreamDeckReplacement"]
@@ -27,6 +27,8 @@ axum = { version = "0.7.7", features = ["tracing", "ws", "macros"] }
 axum-extra = { version = "0.9.4", features = ["protobuf"] }
 tonic = "0.12.3"
 sled = { version = "0.34.7", features = ["compression", "no_logs"] }
+rcgen = "0.13.1"
+local-ip-address = "0.6.3"
 
 # Local crates as dependencies
 Config = { path = "crates/config" }
@@ -35,4 +37,4 @@ macros = { path = "crates/macros" }
 PrettyLogs = { path = "crates/prettylogs" }
 AppState = { path = "crates/appstate" }
 Webserver = { path = "crates/webserver" }
-database = {path = "crates/database"}
+database = { path = "crates/database" }

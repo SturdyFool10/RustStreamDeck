@@ -1,6 +1,7 @@
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{self, Read, Write},
+    path::Path,
 };
 use tracing::{error, info};
 
@@ -25,6 +26,21 @@ pub fn read_file(path: &str) -> Result<String, String> {
             Err(e.to_string()) // Return error as string
         }
     }
+}
+
+pub fn write_bytes_to_file(bytes: std::io::Bytes<&[u8]>, filename: &str) -> io::Result<()> {
+    let mut file = File::create(filename)?;
+
+    for byte in bytes {
+        file.write_all(&[byte?])?;
+    }
+
+    Ok(())
+}
+
+pub fn check_file_exists(path: &str) -> bool {
+    //check for file existance without messing with it if it does
+    Path::new(path).exists()
 }
 
 pub fn write_to_file(path: &str, contents: &str) -> Result<(), String> {

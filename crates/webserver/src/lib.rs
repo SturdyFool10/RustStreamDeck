@@ -6,11 +6,20 @@ use axum::Router;
 use axum_extra::response::{Css, Html, JavaScript};
 use database::Password;
 use futures::{SinkExt, StreamExt};
+use local_ip_address::list_afinet_netifas;
+use rcgen::{
+    date_time_ymd, generate_simple_self_signed, Certificate, CertificateParams, DnType, KeyPair,
+};
+use serde::Serialize;
+use std::fs::{remove_file, File};
+use std::io::{Read, Write};
+use std::path::Path;
 use std::time::Duration;
 use std::{net::SocketAddr, string::FromUtf8Error};
 use tokio::sync::broadcast::Receiver;
 use tokio::time::timeout;
 use tracing::{error, info};
+use FileHelpers::*;
 #[derive(Debug)]
 enum MessageTypes {
     Invalid,
@@ -24,10 +33,70 @@ enum MessageTypes {
 pub async fn start_web_server(state: AppState::AppState) {
     let (interface_proper, interface_pretty, port) = get_config_values(state.clone()).await;
     info!("Starting web server on {}:{}", interface_pretty, port);
-
+    //check for certs and keys, if they exist, use them, if they don't, generate them
+    check_certs();
     let address: SocketAddr = SocketAddr::new(interface_proper.parse().expect("config.interface is an invalid IP address\nif you don't care where requests come from, use 0.0.0.0\nto only accept requests from the local network, find your gateway IP and configure interface to match that.\nin a multi-network situation, choose the IP of the network adapter within the network you want to accept requests from, only requests from there would be accepted"), port);
 
     start_server(state, address).await;
+}
+
+fn check_certs() {
+    if !check_file_exists("cert.pem") || !check_file_exists("key.pem") {
+        info!("No cert.pem or key.pem found, generating them");
+        let res = generate_cert_and_key();
+        match res {
+            Ok(_) => info!("Successfully generated cert.pem and key.pem"),
+            Err(e) => {
+                error!("Failed to generate cert.pem and key.pem, Error: {}", e);
+                panic!("Failed to generate cert.pem and key.pem, Error: {}", e);
+            }
+        }
+    }
+}
+
+fn generate_cert_and_key() -> Result<(), Box<dyn std::error::Error>> {
+    let subject_alts = get_local_addresses();
+    let mut params: CertificateParams = Default::default();
+    let key_pair = KeyPair::generate()?;
+    params.not_before = date_time_ymd(2022, 1, 1);
+    params.not_after = date_time_ymd(4023, 1, 1);
+    params.distinguished_name = rcgen::DistinguishedName::new();
+    params
+        .distinguished_name
+        .push(DnType::OrganizationName, "Sturdy LLC");
+    params
+        .distinguished_name
+        .push(DnType::CommonName, "Deckify");
+    params.subject_alt_names = subject_alts
+        .iter()
+        .map(|x| rcgen::SanType::DnsName(x.as_str().try_into().unwrap()))
+        .collect();
+    let cert = params.self_signed(&key_pair).unwrap();
+
+    let pem_serial = cert.pem();
+    write_to_file("certs/cert.pem", &pem_serial).unwrap();
+    let der = cert.der();
+    let der_bytes = der.bytes();
+    write_bytes_to_file(der_bytes, "certs/cert.der").unwrap();
+    let key_serial = key_pair.serialize_pem();
+    write_to_file("certs/key.pem", &key_serial).unwrap();
+    let key_der = key_pair.serialize_der();
+    std::fs::write("certs/key.der", key_der).unwrap();
+    Ok(())
+}
+
+fn get_local_addresses() -> Vec<String> {
+    let mut addresses: Vec<String> = list_afinet_netifas()
+        .unwrap()
+        .into_iter()
+        .map(|(_, ip)| ip.to_string())
+        .collect();
+
+    // Adding common localhost addresses for both IPv4 and IPv6
+    addresses.push("localhost".to_string()); // IPv4 localhost
+    addresses.push("::1".to_string()); // IPv6 localhost
+
+    addresses
 }
 
 //I've reworked the webserver a couple of times, these operations are consistently needed though, so I extracted it into a different function
