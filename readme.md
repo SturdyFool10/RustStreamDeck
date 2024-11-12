@@ -70,10 +70,10 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    Open a terminal and run:
 
-	```bash
+```bash
 
    git clone --recursive https://github.com/SturdyFool10/RustStreamDeck.git
-	```
+```
 
 5. **Navigate to the New Folder**
 
@@ -81,11 +81,11 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    Open a terminal in this folder and run:
 
-	```bash
+```bash
 
    cargo build --release # "--release" makes the app faster and more efficient.
 
-	```
+```
 
 7. **Locate the Executable**  
 
@@ -113,11 +113,11 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    In a terminal, run:
 
-	```bash
+```bash
 
    git clone --recursive https://github.com/SturdyFool10/RustStreamDeck.git
 
-	```
+```
 
 5. **Navigate to the New Folder**
 
@@ -125,11 +125,10 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    Open a terminal in this folder and run:
 
-	```bash
+```bash
 
    cargo build --release # "--release" optimizes performance.
-
-	```
+```
 
 7. **Locate the Executable**  
 
@@ -139,7 +138,7 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    Move the executable to your desired location, then create a `start.sh` script with this content:
 
-	```bash
+```bash
 
    #!/bin/bash
 
@@ -149,17 +148,17 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    sudo ./StreamDeckReplacement
 
-	```
+```
 
 9. **Make the Script Executable**  
 
    Run the following command to make `start.sh` executable:
 
-	```bash
+```bash
 
    chmod +x start.sh
 
-	```
+```
 
 10. **Run Deckify**  
 
@@ -175,11 +174,11 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    If you don’t already have Git, install it using [Homebrew](https://brew.sh/) or by downloading it directly from [Git-SCM](https://git-scm.com/).
 
-	```bash
+```bash
 
    brew install git
 
-	```
+```
 
 
 
@@ -199,19 +198,19 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    In your terminal, clone the Deckify repository:
 
-	```bash
+```bash
 
    git clone --recursive https://github.com/SturdyFool10/RustStreamDeck.git
 
-	```
+```
 
    Navigate into the newly created directory:
 
-	```bash
+```bash
 
    cd RustStreamDeck
 
-	```
+```
 
 
 
@@ -219,11 +218,11 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    Run the following command to build Deckify in release mode for optimized performance:
 
-	```bash
+```bash
 
    cargo build --release # "--release" optimizes performance
 
-	```
+```
 
 
 
@@ -237,19 +236,19 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    To start Deckify, open a terminal in the directory where the executable is located. If you're using a port above 1024, simply run:
 
-	```bash
+```bash
 
    ./StreamDeckReplacement
 
-	```
+```
 
    However, if you’re running Deckify on a port below 1024 (e.g., the default port 80), you’ll need to start it with elevated permissions. For that, use `sudo`:
 
-	```bash
+```bash
 
    sudo ./StreamDeckReplacement
 
-	```
+```
 
 
 
@@ -257,7 +256,7 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    You can create a `start.sh` script to simplify the startup process. Here’s an example:
 
-	```bash
+```bash
 
    #!/bin/bash
 
@@ -267,7 +266,7 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    sudo ./StreamDeckReplacement
 
-	```
+```
 
 
 
@@ -275,11 +274,11 @@ Deckify is a standalone package that runs smoothly on its default settings (whic
 
    After creating `start.sh`, make it executable:
 
-	```bash
+```bash
 
    chmod +x start.sh
 
-	```
+```
 
 
 
