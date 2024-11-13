@@ -27,4 +27,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: StreamDeckReplacement
-          path: /Users/runner/work/RustStreamDeck/RustStreamDeck/target/dist/StreamDeckReplacement
+          path: target/dist/StreamDeckReplacement
