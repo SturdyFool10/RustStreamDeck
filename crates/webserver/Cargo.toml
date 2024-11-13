@@ -11,12 +11,11 @@ tracing.workspace = true
 futures.workspace = true
 regex.workspace = true
 prost.workspace = true
-axum.workspace = true
 tonic.workspace = true
 sled.workspace = true
-axum-extra.workspace = true
 rcgen.workspace = true
 local-ip-address.workspace = true
+warp.workspace = true
 
 AppState.workspace = true
 database.workspace = true

@@ -4,3 +4,4 @@ config.json
 /.idea
 /.vs
 /auth
+/certs

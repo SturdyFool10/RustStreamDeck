@@ -1,9 +1,3 @@
-use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{State, WebSocketUpgrade};
-use axum::response::IntoResponse;
-use axum::routing::get;
-use axum::Router;
-use axum_extra::response::{Css, Html, JavaScript};
 use database::Password;
 use futures::{SinkExt, StreamExt};
 use local_ip_address::list_afinet_netifas;
@@ -19,6 +13,8 @@ use std::{net::SocketAddr, string::FromUtf8Error};
 use tokio::sync::broadcast::Receiver;
 use tokio::time::timeout;
 use tracing::{error, info};
+use warp::filters::ws::{Message, WebSocket};
+use warp::{reply, Filter as _};
 use FileHelpers::*;
 #[derive(Debug)]
 enum MessageTypes {
@@ -36,21 +32,17 @@ pub async fn start_web_server(state: AppState::AppState) {
     //check for certs and keys, if they exist, use them, if they don't, generate them
     check_certs();
     let address: SocketAddr = SocketAddr::new(interface_proper.parse().expect("config.interface is an invalid IP address\nif you don't care where requests come from, use 0.0.0.0\nto only accept requests from the local network, find your gateway IP and configure interface to match that.\nin a multi-network situation, choose the IP of the network adapter within the network you want to accept requests from, only requests from there would be accepted"), port);
-
     start_server(state, address).await;
 }
 
 fn check_certs() {
-    if !check_file_exists("cert.pem") || !check_file_exists("key.pem") {
-        info!("No cert.pem or key.pem found, generating them");
-        let res = generate_cert_and_key();
-        match res {
-            Ok(_) => info!("Successfully generated cert.pem and key.pem"),
-            Err(e) => {
-                error!("Failed to generate cert.pem and key.pem, Error: {}", e);
-                panic!("Failed to generate cert.pem and key.pem, Error: {}", e);
-            }
-        }
+    if !check_file_exists("certs/cert.pem")
+        || !check_file_exists("certs/key.pem")
+        || !check_file_exists("certs/cert.der")
+        || !check_file_exists("certs/key.der")
+    {
+        info!("one of the cert files was missing, so I need to regenerate all of them");
+        generate_cert_and_key();
     }
 }
 
@@ -58,7 +50,7 @@ fn generate_cert_and_key() -> Result<(), Box<dyn std::error::Error>> {
     let subject_alts = get_local_addresses();
     let mut params: CertificateParams = Default::default();
     let key_pair = KeyPair::generate()?;
-    params.not_before = date_time_ymd(2022, 1, 1);
+    params.not_before = date_time_ymd(2024, 1, 1);
     params.not_after = date_time_ymd(4023, 1, 1);
     params.distinguished_name = rcgen::DistinguishedName::new();
     params
@@ -72,6 +64,10 @@ fn generate_cert_and_key() -> Result<(), Box<dyn std::error::Error>> {
         .map(|x| rcgen::SanType::DnsName(x.as_str().try_into().unwrap()))
         .collect();
     let cert = params.self_signed(&key_pair).unwrap();
+    //check if the /certs folder exists, if it doesn't, create it
+    if !check_file_exists("/certs") {
+        std::fs::create_dir("/certs").unwrap();
+    }
 
     let pem_serial = cert.pem();
     write_to_file("certs/cert.pem", &pem_serial).unwrap();
@@ -111,51 +107,61 @@ async fn get_config_values(state: AppState::AppState) -> (String, String, u16) {
 
 //the function below is an internal function to the file, no other files can rely on it, it shall not exit unless the webserver goes down
 async fn start_server(state: AppState::AppState, address: SocketAddr) {
-    let router: Router = create_router(state.clone());
+    const JS_CONTENT: &str = include_str!("../html_src/index.js");
+    const CSS_CONTENT: &str = include_str!("../html_src/style.css");
+    const HTML_CONTENT: &str = include_str!("../html_src/index.html");
+    const CRYPTO_CONTENT: &str = include_str!("../html_src/crypto.min.js");
+    const JQUERY_CONTENT: &str = include_str!("../html_src/jquery.min.js");
+    // Perform any necessary certificate checks
+    check_certs();
 
-    let listener = tokio::net::TcpListener::bind(address).await.unwrap();
-    axum::serve(listener, router).await.unwrap();
+    let cert = "certs/cert.pem";
+    let key = "certs/key.pem";
+    // Route for `index.js`
+    let js_route = warp::path("index.js").map(|| serve_javascript(JS_CONTENT));
+    // Route for `style.css`
+    let css_route = warp::path("style.css").map(|| serve_css(CSS_CONTENT));
+    // Route for `crypto.min.js`
+    let crypto_route = warp::path("crypto.js").map(|| serve_javascript(CRYPTO_CONTENT));
+    // Route for `jquery.min.js`
+    let jquery_route = warp::path("jquery.js").map(|| serve_javascript(JQUERY_CONTENT));
+    // Route for WebSocket `ws`
+    let ws_route = warp::path("ws")
+        .and(warp::ws())
+        .and(warp::any().map(move || state.clone()))
+        .map(|ws: warp::ws::Ws, state: AppState::AppState| {
+            ws.on_upgrade(move |socket| handle_socket(socket, state))
+        });
+    // Route for serving the HTML at the root path
+    let root_route = warp::path::end().map(|| warp::reply::html(HTML_CONTENT));
+
+    // Merge all routes together
+    let routes = js_route
+        .or(css_route)
+        .or(crypto_route)
+        .or(jquery_route)
+        .or(ws_route)
+        .or(root_route);
+
+    // Serve with TLS
+    warp::serve(routes)
+        .tls()
+        .cert_path(cert)
+        .key_path(key)
+        .run(address)
+        .await;
 }
 
-fn create_router(state: AppState::AppState) -> Router {
-    let router: Router = Router::new()
-        .route("/", get(handle_html))
-        .route("/index.js", get(handle_javascript))
-        .route("/crypto.js", get(handle_crypto))
-        .route("/jquery.js", get(handle_jquery))
-        .route("/style.css", get(handle_css))
-        .route("/ws", get(ws_handler))
-        .with_state(state);
-    router
+fn serve_javascript(js_content: &'static str) -> impl warp::Reply {
+    reply::with_header(
+        reply::html(js_content),
+        "Content-Type",
+        "application/javascript",
+    )
 }
 
-//the handlers below need no state, they just return their static files respectively
-async fn handle_html(State(_): State<AppState::AppState>) -> Html<String> {
-    let str = include_str!("../html_src/index.html");
-    Html(str.to_owned())
-}
-async fn handle_javascript(State(_): State<AppState::AppState>) -> JavaScript<String> {
-    let str = include_str!("../html_src/index.js");
-    JavaScript(str.to_owned())
-}
-async fn handle_crypto(State(_): State<AppState::AppState>) -> JavaScript<String> {
-    let str = include_str!("../html_src/crypto.min.js");
-    JavaScript(str.to_owned())
-}
-async fn handle_jquery(State(_): State<AppState::AppState>) -> JavaScript<String> {
-    let str = include_str!("../html_src/jquery.min.js");
-    JavaScript(str.to_owned())
-}
-async fn handle_css(State(_): State<AppState::AppState>) -> Css<String> {
-    let str = include_str!("../html_src/style.css");
-    Css(str.to_owned())
-}
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState::AppState>,
-) -> impl IntoResponse {
-    let l = ws.on_upgrade(move |socket| handle_socket(socket, state.clone()));
-    l
+fn serve_css(css_content: &'static str) -> impl warp::Reply {
+    reply::with_header(reply::html(css_content), "Content-Type", "text/css")
 }
 
 async fn handle_send_task(
@@ -166,7 +172,7 @@ async fn handle_send_task(
 ) {
     //this function will be used to send messages to the client and exit if the client is disconnected
     while let Ok(val) = global_tx.recv().await {
-        let message = Message::Text(val);
+        let message = Message::text(val);
         let mut sender = socket.tx.lock().await;
         let send_result = sender.send(message).await;
         drop(sender); //drop the lock as soon as we can, we don't need it anymore
@@ -193,7 +199,7 @@ async fn send_message_to_tx(socket: &AppState::SocketState, message: &str) {
         .tx
         .lock()
         .await
-        .send(Message::Text(message.to_string()))
+        .send(Message::text(message.to_string()))
         .await;
 }
 //function to send a binary message to a socket
@@ -203,7 +209,7 @@ async fn send_binary_message_to_tx(socket: &AppState::SocketState, message: &[u8
         .tx
         .lock()
         .await
-        .send(Message::Binary(message.to_vec()))
+        .send(Message::binary(message.to_vec()))
         .await;
 }
 
@@ -217,7 +223,7 @@ async fn send_result_packet(socket: AppState::SocketState, msg: String) {
     buffer.extend_from_slice(&opcode);
     buffer.extend_from_slice(&msg_len);
     buffer.extend_from_slice(&msg_bytes);
-    let res = tx.send(Message::Binary(buffer)).await;
+    let res = tx.send(Message::binary(buffer)).await;
     match res {
         Ok(_) => (),
         Err(_) => {}
@@ -251,94 +257,91 @@ async fn handle_recv_task(
                   //we are expecting all our messages in binary format, so we need to decode them, for starters there is a header taking two bytes, this is expected to be 0x5F10,
                   //then there is an opcode which specifies type, this is 16 bytes, then the rest is up to the message type, all messages are in big endian
                   //check if the message is empty text, this can be caused by the timeout running out of time, we do this to ensure mutexes are dropped often so other tasks only wait 10ms max
-        if let Message::Text(msg) = message.clone() {
-            if msg == "".to_string() {
+        if message.is_text() {
+            let msg = message.to_str().unwrap_or("");
+            if msg == "" {
                 continue;
             }
         }
-        let message = match message {
-            Message::Binary(message) => message,
-            _ => {
+        if message.is_binary() {
+            let message = message.as_bytes();
+            if message[0] != 0x5F || message[1] != 0x10 {
                 send_result_packet(socket.clone(), "invalid".to_string()).await;
                 continue;
             }
-        };
-        //check header, make sure it is 0x5F10
-        if message[0] != 0x5F || message[1] != 0x10 {
-            send_result_packet(socket.clone(), "invalid".to_string()).await;
-            continue;
-        }
-        //check opcode
-        let opcode: u16 = u16::from_be_bytes([message[2], message[3]]);
-        let message = &message[4..];
-        info!("Got a message, OpCode: {}", opcode);
-        let message: MessageTypes =
-            check_message(opcode, message, id, socket.clone(), state.clone()).await;
-        info!("Message is of type: {:?}", message);
-        match message {
-            MessageTypes::Auth(username, password_hash) => {
-                //user has already been checked, so we just need to verify the password
-                let auth =
-                    database::check_password(&state.db, username.as_str(), password_hash.as_str())
-                        .unwrap();
-                if auth {
-                    send_result_packet(socket.clone(), "authed".to_string()).await;
-                    *socket.authenticated.lock().await = true;
-                    *socket.username.lock().await = Some(username);
-                } else {
-                    send_result_packet(socket.clone(), "Incorrect Password".to_string()).await
+            let opcode: u16 = u16::from_be_bytes([message[2], message[3]]);
+            let message = &message[4..];
+            let message: MessageTypes =
+                check_message(opcode, message, id, socket.clone(), state.clone()).await;
+            match message {
+                MessageTypes::Auth(username, password_hash) => {
+                    //user has already been checked, so we just need to verify the password
+                    let auth = database::check_password(
+                        &state.db,
+                        username.as_str(),
+                        password_hash.as_str(),
+                    )
+                    .unwrap();
+                    if auth {
+                        send_result_packet(socket.clone(), "authed".to_string()).await;
+                        *socket.authenticated.lock().await = true;
+                        *socket.username.lock().await = Some(username);
+                    } else {
+                        send_result_packet(socket.clone(), "Incorrect Password".to_string()).await
+                    }
                 }
-            }
-            MessageTypes::RequestSalt(username) => {
-                //client is asking for salt from the db, format of message will be salt as Unicode
-                let salt = database::get_salt(&state.db, username.as_str()).unwrap();
-                let salt = salt.as_bytes();
-                let mut salt_message = vec![0x5F, 0x10];
-                let opcode = 1u16.to_be_bytes();
-                //add opcode
-                salt_message.extend_from_slice(&opcode);
-                //add salt
-                salt_message.extend_from_slice(salt);
-                send_binary_message_to_tx(&socket, &salt_message).await;
-            }
-            MessageTypes::CreateAccount(username, password_hash, salt) => {
-                //client is asking to create an account, response will be success or failure, success authenticates the user
-                let password: Password = Password {
-                    hash: password_hash,
-                    salt,
-                };
-                let result = database::add_credentials(&state.db, username.as_str(), password);
-                let success = match result {
-                    Ok(_) => true,
-                    Err(_) => false,
-                };
-                if success {
-                    send_result_packet(socket.clone(), "acct_created".to_string()).await;
-                    send_result_packet(socket.clone(), "authed".to_string()).await;
-                    *socket.authenticated.lock().await = true;
-                    *socket.username.lock().await = Some(username);
-                } else {
-                    send_result_packet(socket.clone(), "acct_gen_fail".to_string()).await
+                MessageTypes::RequestSalt(username) => {
+                    //client is asking for salt from the db, format of message will be salt as Unicode
+                    let salt = database::get_salt(&state.db, username.as_str()).unwrap();
+                    let salt = salt.as_bytes();
+                    let mut salt_message = vec![0x5F, 0x10];
+                    let opcode = 1u16.to_be_bytes();
+                    //add opcode
+                    salt_message.extend_from_slice(&opcode);
+                    //add salt
+                    salt_message.extend_from_slice(salt);
+                    send_binary_message_to_tx(&socket, &salt_message).await;
                 }
-            }
-            MessageTypes::ChangePassword(username, old_hash, new_password_hash, salt) => {
-                //client is asking to change their password, response will be success or failure
-                let password: Password = Password {
-                    hash: new_password_hash,
-                    salt,
-                };
-                let result = database::change_password(&state.db, &username, &old_hash, password);
-                let success = match result {
-                    Ok(_) => true,
-                    Err(_) => false,
-                };
-                if success {
-                    send_result_packet(socket.clone(), "pass_chngd".to_string()).await
-                } else {
-                    send_result_packet(socket.clone(), "pass_chng_fail".to_string()).await
+                MessageTypes::CreateAccount(username, password_hash, salt) => {
+                    //client is asking to create an account, response will be success or failure, success authenticates the user
+                    let password: Password = Password {
+                        hash: password_hash,
+                        salt,
+                    };
+                    let result = database::add_credentials(&state.db, username.as_str(), password);
+                    let success = match result {
+                        Ok(_) => true,
+                        Err(_) => false,
+                    };
+                    if success {
+                        send_result_packet(socket.clone(), "acct_created".to_string()).await;
+                        send_result_packet(socket.clone(), "authed".to_string()).await;
+                        *socket.authenticated.lock().await = true;
+                        *socket.username.lock().await = Some(username);
+                    } else {
+                        send_result_packet(socket.clone(), "acct_gen_fail".to_string()).await
+                    }
                 }
+                MessageTypes::ChangePassword(username, old_hash, new_password_hash, salt) => {
+                    //client is asking to change their password, response will be success or failure
+                    let password: Password = Password {
+                        hash: new_password_hash,
+                        salt,
+                    };
+                    let result =
+                        database::change_password(&state.db, &username, &old_hash, password);
+                    let success = match result {
+                        Ok(_) => true,
+                        Err(_) => false,
+                    };
+                    if success {
+                        send_result_packet(socket.clone(), "pass_chngd".to_string()).await
+                    } else {
+                        send_result_packet(socket.clone(), "pass_chng_fail".to_string()).await
+                    }
+                }
+                _ => (),
             }
-            _ => (),
         }
     }
 }

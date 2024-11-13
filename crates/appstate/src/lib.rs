@@ -1,9 +1,10 @@
-use axum::extract::ws::{Message, WebSocket};
 use futures::stream::{SplitSink, SplitStream};
 use sled::Db;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use tracing::info;
+use warp::ws::Message;
+use warp::ws::WebSocket;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,7 +35,10 @@ impl AppState {
         let mut list = self.socket_state_list.lock().await;
         info!("removing socket {} from list", index);
         if index > list.len() - 1 {
-            info!("Failed removing socket id: {}, this can leave us with phantom sockets!", index);
+            info!(
+                "Failed removing socket id: {}, this can leave us with phantom sockets!",
+                index
+            );
             return;
         } else {
             list.remove(index);

@@ -11,9 +11,9 @@ tracing.workspace = true
 futures.workspace = true
 regex.workspace = true
 prost.workspace = true
-axum.workspace = true
 tonic.workspace = true
 sled.workspace = true
+warp.workspace = true
 
 Config.workspace = true
 FileHelpers.workspace = true
