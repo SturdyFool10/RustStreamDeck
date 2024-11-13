@@ -3,26 +3,28 @@ name: Build Linux
 on:
   push:
     branches:
-      - main # Adjust this to your main branch name
+      - main
+  pull_request:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Use the latest Windows runner
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4 # This step checks out your repository
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: x86_64-unknown-linux-gnu
 
-      - name: Build and Compile
-        run: cargo build --profile=dist # Run your build command
+      - name: Build project
+        run: cargo build --release --target-dir target/dist
 
-      - name: Archive Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
         with:
-          name: Linux_Artifact
-          path: target/release/server_host # Replace with the actual path to your compiled binary
+          name: StreamDeckReplacement
+          path: /home/runner/work/RustStreamDeck/RustStreamDeck/target/dist/StreamDeckReplacement

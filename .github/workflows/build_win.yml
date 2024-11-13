@@ -1,28 +1,30 @@
-name: Build Win
+name: Build Windows
 
 on:
   push:
     branches:
-      - main # Adjust this to your main branch name
+      - main
+  pull_request:
 
 jobs:
   build:
-    runs-on: windows-latest # Use the latest Windows runner
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4 # This step checks out your repository
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: x86_64-pc-windows-msvc
 
-      - name: Build and Compile
-        run: cargo build --profile=dist # Run your build command
+      - name: Build project
+        run: cargo build --release --target-dir target/dist
 
-      - name: Archive Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
         with:
-          name: Win_Artifact
-          path: target/release/server_host.exe # Replace with the actual path to your compiled binary
+          name: StreamDeckReplacement
+          path: D:/a/RustStreamDeck/RustStreamDeck/target/dist/StreamDeckReplacement.exe
