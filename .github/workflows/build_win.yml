@@ -19,7 +19,7 @@ jobs:
           toolchain: stable
 
       - name: Build and Compile
-        run: cargo build --release # Run your build command
+        run: cargo build --profile=dist # Run your build command
 
       - name: Archive Artifact
         uses: actions/upload-artifact@v4

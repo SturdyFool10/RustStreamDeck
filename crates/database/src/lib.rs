@@ -27,6 +27,11 @@ pub fn add_credentials(db: &Db, username: &str, password: Password) -> Result<bo
     db.insert(username, serialized.as_bytes()).unwrap();
     Ok(true)
 }
+
+pub fn is_db_empty(db: &Db) -> bool {
+    db.is_empty()
+}
+
 //helper function to check if the password is correct, returns Result<bool, String> and errors if the user does not exist
 pub fn check_password(db: &Db, username: &str, password: &str) -> Result<bool, String> {
     if !user_exists(db, username) {

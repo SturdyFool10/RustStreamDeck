@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+
 members = [
     "crates/config",
     "crates/filehelpers",
@@ -9,6 +10,7 @@ members = [
     "crates/StreamDeckReplacement",
     "crates/webserver",
     "crates/database",
+    "crates/StreamDeckReplacement",
 ]
 
 default-members = ["crates/StreamDeckReplacement"]
@@ -18,7 +20,11 @@ serde = { version = "1.0.183", features = ["derive", "serde_derive"] }
 serde_json = { version = "1.0.105", features = ["float_roundtrip"] }
 tokio = { version = "1.40.0", features = ["full", "tracing"] }
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["tracing"] }
+tracing-subscriber = { version = "0.3.18", features = [
+    "tracing",
+    "env-filter",
+    "std",
+] }
 futures = "0.3.28"
 futures-util = "0.3.28"
 regex = "1.10.2"
@@ -38,3 +44,25 @@ PrettyLogs = { path = "crates/prettylogs" }
 AppState = { path = "crates/appstate" }
 Webserver = { path = "crates/webserver" }
 database = { path = "crates/database" }
+
+# Profiles for build optimization
+[profile.dev]
+opt-level = 0
+debug = true
+debug-assertions = true
+overflow-checks = true
+lto = false
+
+[profile.release]
+opt-level = "z"          # Use "3" if "z" causes performance loss
+debug = true             # Include debug info for PDB files
+debug-assertions = false # Disable debug assertions for runtime performance
+overflow-checks = false  # Disable integer overflow checks for performance
+lto = "fat"              # Enable full Link Time Optimization (LTO)
+codegen-units = 1        # Single codegen unit for better optimizations
+panic = "abort"          # Use abort on panic to avoid unwinding costs
+incremental = false      # Disable incremental compilation for fully optimized builds
+
+[profile.dist]
+inherits = "release" # Inherit settings from release profile
+debug = false        # No debug information for PDB, stripped for distribution
