@@ -8,7 +8,7 @@ use warp::ws::WebSocket;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub config: Arc<Mutex<Config::Config>>,
+    pub config: Arc<Mutex<config::Config>>,
     pub socket_state_list: Arc<Mutex<Vec<SocketState>>>,
     pub tx: broadcast::Sender<String>,
     pub db: Db,
@@ -16,7 +16,7 @@ pub struct AppState {
 
 #[allow(dead_code)] //this is a state api, whether it gets used is irrelevant
 impl AppState {
-    pub fn new(config: Config::Config, db: Db) -> Self {
+    pub fn new(config: config::Config, db: Db) -> Self {
         Self {
             config: Arc::new(Mutex::new(config)),
             socket_state_list: Arc::new(Mutex::new(Vec::new())),

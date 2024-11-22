@@ -1,5 +1,6 @@
 /// Imports for the web server module
 use database::Password;
+use file_helpers::*;
 use futures::{SinkExt, StreamExt};
 use local_ip_address::list_afinet_netifas;
 use rcgen::{date_time_ymd, CertificateParams, DnType, KeyPair};
@@ -12,7 +13,6 @@ use tokio::time::timeout;
 use tracing::info;
 use warp::filters::ws::{Message, WebSocket};
 use warp::{reply, Filter as _};
-use FileHelpers::*;
 
 /// Message types for the binary communication protocol
 /// Each variant represents a different type of message that can be sent/received
@@ -32,7 +32,7 @@ pub enum MessageTypes {
 
 /// Initializes and starts the HTTPS web server
 /// Takes application state as parameter
-pub async fn start_web_server(state: AppState::AppState) {
+pub async fn start_web_server(state: app_state::AppState) {
     let (interface_proper, interface_pretty, port) = get_config_values(state.clone()).await;
     info!("Starting web server on {}:{}", interface_pretty, port);
     check_certs();
@@ -115,7 +115,7 @@ fn get_local_addresses() -> Vec<String> {
 }
 
 /// Gets interface and port configuration values from application state
-async fn get_config_values(state: AppState::AppState) -> (String, String, u16) {
+async fn get_config_values(state: app_state::AppState) -> (String, String, u16) {
     let config = state.config.lock().await;
     let interface_proper = config.interface.clone();
     let interface_pretty = interface_proper.replace("0.0.0.0", "*");
@@ -126,7 +126,7 @@ async fn get_config_values(state: AppState::AppState) -> (String, String, u16) {
 
 /// Starts the HTTPS server with WebSocket support
 /// Serves static files and handles WebSocket connections
-async fn start_server(state: AppState::AppState, address: SocketAddr) {
+async fn start_server(state: app_state::AppState, address: SocketAddr) {
     // Load static file contents
     const JS_CONTENT: &str = include_str!("../html_src/index.js");
     const CSS_CONTENT: &str = include_str!("../html_src/style.css");
@@ -151,7 +151,7 @@ async fn start_server(state: AppState::AppState, address: SocketAddr) {
         .or(warp::path("ws")
             .and(warp::ws())
             .and(warp::any().map(move || state.clone()))
-            .map(|ws: warp::ws::Ws, state: AppState::AppState| {
+            .map(|ws: warp::ws::Ws, state: app_state::AppState| {
                 ws.on_upgrade(move |socket| handle_socket(socket, state))
             }));
 
@@ -187,9 +187,9 @@ fn serve_css(css_content: &'static str) -> impl warp::Reply {
 /// Sends messages through WebSocket and handles disconnections
 async fn handle_send_task(
     mut global_tx: Receiver<String>,
-    socket: AppState::SocketState,
+    socket: app_state::SocketState,
     id: usize,
-    _state: AppState::AppState,
+    _state: app_state::AppState,
 ) {
     while let Ok(val) = global_tx.recv().await {
         let message = Message::text(val);
@@ -213,7 +213,7 @@ fn decode_string_from_buffer(buffer: &[u8]) -> Result<String, FromUtf8Error> {
 }
 
 /// Sends binary message through WebSocket
-async fn send_binary_message_to_tx(socket: &AppState::SocketState, message: &[u8]) {
+async fn send_binary_message_to_tx(socket: &app_state::SocketState, message: &[u8]) {
     let _ = socket
         .tx
         .lock()
@@ -224,7 +224,7 @@ async fn send_binary_message_to_tx(socket: &AppState::SocketState, message: &[u8
 
 /// Sends formatted result packet through WebSocket
 /// Packet format: [0x5F, 0x10, opcode(2), msg_len(8), msg_bytes]
-async fn send_result_packet(socket: AppState::SocketState, msg: String) {
+async fn send_result_packet(socket: app_state::SocketState, msg: String) {
     let mut tx = socket.tx.lock().await;
     let mut buffer: Vec<u8> = vec![0x5F, 0x10];
     let opcode = u16::to_be_bytes(0x02u16);
@@ -241,9 +241,9 @@ async fn send_result_packet(socket: AppState::SocketState, msg: String) {
 /// Processes binary protocol packets and manages authentication state
 async fn handle_recv_task(
     _global_tx: Receiver<String>,
-    socket: AppState::SocketState,
+    socket: app_state::SocketState,
     id: usize,
-    state: AppState::AppState,
+    state: app_state::AppState,
 ) {
     let socket_clone = socket.clone();
 
@@ -358,8 +358,8 @@ async fn check_message(
     opcode: u16,
     message: &[u8],
     _id: usize,
-    socket: AppState::SocketState,
-    state: AppState::AppState,
+    socket: app_state::SocketState,
+    state: app_state::AppState,
 ) -> MessageTypes {
     match opcode {
         // Request salt for username
@@ -592,9 +592,9 @@ async fn check_message(
 
 /// Handles new WebSocket connections
 /// Sets up send/receive tasks and manages connection lifecycle
-async fn handle_socket(socket: WebSocket, state: AppState::AppState) {
+async fn handle_socket(socket: WebSocket, state: app_state::AppState) {
     let (sender, recievr) = socket.split();
-    let socket_state = AppState::SocketState::new(recievr, sender);
+    let socket_state = app_state::SocketState::new(recievr, sender);
     let id: usize = state.add_socket(socket_state.clone()).await;
 
     let mut send_task = tokio::spawn(handle_send_task(

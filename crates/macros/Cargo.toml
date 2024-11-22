@@ -14,6 +14,6 @@ prost.workspace = true
 tonic.workspace = true
 sled.workspace = true
 
-Config.workspace = true
-AppState.workspace = true
+config.workspace = true
+app_state.workspace = true
 tracing-subscriber = "0.3.18"

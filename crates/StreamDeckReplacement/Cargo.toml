@@ -43,10 +43,10 @@ prost.workspace = true
 tonic.workspace = true
 sled.workspace = true
 
-Config.workspace = true
-FileHelpers.workspace = true
+config.workspace = true
+file_helpers.workspace = true
 macros.workspace = true
-PrettyLogs.workspace = true
-AppState.workspace = true
-Webserver.workspace = true
+pretty_logs.workspace = true
+app_state.workspace = true
+webserver.workspace = true
 database.workspace = true

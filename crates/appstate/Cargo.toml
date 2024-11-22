@@ -1,5 +1,5 @@
 [package]
-name = "AppState"
+name = "app_state"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,5 +15,5 @@ tonic.workspace = true
 sled.workspace = true
 warp.workspace = true
 
-Config.workspace = true
-FileHelpers.workspace = true
+config.workspace = true
+file_helpers.workspace = true

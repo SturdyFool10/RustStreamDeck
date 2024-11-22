@@ -1,7 +1,7 @@
+use file_helpers::{read_file, write_to_file};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::{error, warn};
-use FileHelpers::{read_file, write_to_file};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {

@@ -2,10 +2,10 @@ use database::init_db;
 use std::process::exit;
 use tracing::*;
 
+use config::init_config;
 use macros::{await_any, spawn_tasks};
-use Config::init_config;
-use PrettyLogs::init_logging;
-use Webserver::start_web_server;
+use pretty_logs::init_logging;
+use webserver::start_web_server;
 
 /*
 Welcome to the Streamdeck replacement codebase. the goals of this code is to make a fast, easy
@@ -32,7 +32,7 @@ async fn main() {
     init_logging();
     let config = init_config();
     let db = init_db().await;
-    let state: AppState::AppState = AppState::AppState::new(config, db);
+    let state: app_state::AppState = app_state::AppState::new(config, db);
     let mut handles = spawn_tasks!(state, start_web_server);
     info!("Started {} tasks", handles.len());
     await_any!(handle_panicked_task, &mut handles[0]);

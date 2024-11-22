@@ -1,5 +1,5 @@
 [package]
-name = "Webserver"
+name = "webserver"
 version = "0.1.0"
 edition = "2021"
 
@@ -17,6 +17,6 @@ rcgen.workspace = true
 local-ip-address.workspace = true
 warp.workspace = true
 
-AppState.workspace = true
+app_state.workspace = true
 database.workspace = true
-FileHelpers.workspace = true
+file_helpers.workspace = true
