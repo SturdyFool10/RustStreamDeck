@@ -167,6 +167,18 @@ h1 {
     border-radius: 25px;
 }
 
+.security_key {
+    width: calc(min(1vw, 1vh) * 90);
+    z-index: 0;
+    position: fixed;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, -75%);
+    background-color: var(--menuBG);
+    border-color: rgba(0, 0, 0, 0);
+    border-radius: 25px;
+}
+
 .dialoguebtnprimary {
     align-self: stretch; /* Makes button span full width within flex container */
     padding: 0.75em;

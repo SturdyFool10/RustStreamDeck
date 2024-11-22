@@ -28,7 +28,7 @@ pub fn init_config() -> Config {
         match res {
             Err(e) => {
                 error!("Error trying to write the default config to a file: {}", e);
-                panic!("{}", e); //something went wrong, there is no way to recover from this
+                panic!("Failed to write default config file: {}", e); //something went wrong, there is no way to recover from this
             }
             _ => {}
         }
@@ -41,7 +41,7 @@ pub fn init_config() -> Config {
                 Ok(conf) => conf,
                 Err(e) => {
                     error!("Error Interpreting config: {}", e);
-                    panic!("{}", e); //something went wrong, there is no way to recover from this
+                    panic!("Config file contains invalid JSON: {}", e); //something went wrong, there is no way to recover from this
                 }
             }
         }
@@ -50,7 +50,7 @@ pub fn init_config() -> Config {
                 "failed to load the config file after checking if it exists, Error: {}",
                 e
             );
-            panic!("{}", e); //something went wrong, there is no way to recover from this
+            panic!("Failed to read config file: {}", e); //something went wrong, there is no way to recover from this
         }
     }
 }
