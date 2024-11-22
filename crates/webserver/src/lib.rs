@@ -112,6 +112,7 @@ async fn start_server(state: AppState::AppState, address: SocketAddr) {
     const HTML_CONTENT: &str = include_str!("../html_src/index.html");
     const CRYPTO_CONTENT: &str = include_str!("../html_src/crypto.min.js");
     const JQUERY_CONTENT: &str = include_str!("../html_src/jquery.min.js");
+    const SECURITY_KEY_SVG_CONTENT: &str = include_str!("../html_src/security_key.svg");
     // Perform any necessary certificate checks
     check_certs();
 
@@ -125,6 +126,8 @@ async fn start_server(state: AppState::AppState, address: SocketAddr) {
     let crypto_route = warp::path("crypto.js").map(|| serve_javascript(CRYPTO_CONTENT));
     // Route for `jquery.min.js`
     let jquery_route = warp::path("jquery.js").map(|| serve_javascript(JQUERY_CONTENT));
+    //route for security key.svg
+    let svg_route = warp::path("security_key.svg").map(|| serve_svg(SECURITY_KEY_SVG_CONTENT));
     // Route for WebSocket `ws`
     let ws_route = warp::path("ws")
         .and(warp::ws())
@@ -141,6 +144,7 @@ async fn start_server(state: AppState::AppState, address: SocketAddr) {
         .or(crypto_route)
         .or(jquery_route)
         .or(ws_route)
+        .or(svg_route)
         .or(root_route);
 
     // Serve with TLS
@@ -158,6 +162,10 @@ fn serve_javascript(js_content: &'static str) -> impl warp::Reply {
         "Content-Type",
         "application/javascript",
     )
+}
+
+fn serve_svg(svg_content: &'static str) -> impl warp::Reply {
+    reply::with_header(reply::html(svg_content), "Content-Type", "image/svg+xml")
 }
 
 fn serve_css(css_content: &'static str) -> impl warp::Reply {

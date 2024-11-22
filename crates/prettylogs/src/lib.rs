@@ -28,7 +28,7 @@ pub fn init_logging() {
         .pretty()
         .without_time()
         .with_line_number(true)
-        .with_file(true)
+        .with_file(false)
         .with_env_filter(deps_filter)
         .with_env_filter(local_filter)
         .init();
