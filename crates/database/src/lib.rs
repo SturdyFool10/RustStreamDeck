@@ -1,99 +1,179 @@
+use rusqlite::Connection;
 use std::error::Error;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-use serde::*;
-use sled::Db;
-
-#[derive(Serialize, Deserialize)]
 pub struct Password {
     pub salt: String,
     pub hash: String,
+    pub security_key: Option<String>,
 }
 
-pub async fn init_db() -> Db {
-    //initialize sled db
-    let db = sled::open("auth").unwrap();
-    db
+pub async fn init_db() -> Arc<Mutex<Connection>> {
+    let conn = Connection::open("auth.db").unwrap();
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            security_key TEXT
+        )",
+        [],
+    )
+    .unwrap();
+    Arc::new(Mutex::new(conn))
 }
-//helper function to check if a user exists, returns true or false
-pub fn user_exists(db: &Db, username: &str) -> bool {
-    db.contains_key(username).unwrap()
+
+pub async fn user_exists(conn: Arc<Mutex<Connection>>, username: &str) -> bool {
+    let conn = conn.lock().await;
+    let mut stmt = conn
+        .prepare("SELECT 1 FROM users WHERE username = ?1")
+        .unwrap();
+    stmt.exists([username]).unwrap()
 }
-//helper function to add credentials to the db, returns Result<bool, String> and errors if the user already exists
-pub fn add_credentials(db: &Db, username: &str, password: Password) -> Result<bool, String> {
-    if user_exists(db, username) {
+
+pub async fn add_credentials(
+    conn: Arc<Mutex<Connection>>,
+    username: &str,
+    password: Password,
+) -> Result<bool, String> {
+    let exists = user_exists(conn.clone(), username).await;
+    if exists {
         return Err("User already exists".to_string());
     }
-    let serialized = serde_json::to_string(&password).unwrap();
-    db.insert(username, serialized.as_bytes()).unwrap();
+    let conn = conn.lock().await;
+    conn.execute(
+        "INSERT INTO users (username, password_hash, salt, security_key) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![
+            username,
+            password.hash,
+            password.salt,
+            password.security_key
+        ],
+    )
+    .unwrap();
     Ok(true)
 }
 
-pub fn is_db_empty(db: &Db) -> bool {
-    db.is_empty()
+pub async fn is_db_empty(conn: Arc<Mutex<Connection>>) -> bool {
+    let conn = conn.lock().await;
+    let mut stmt = conn.prepare("SELECT COUNT(*) FROM users").unwrap();
+    let count: i64 = stmt.query_row([], |row| row.get(0)).unwrap();
+    count == 0
 }
 
-//helper function to check if the password is correct, returns Result<bool, String> and errors if the user does not exist
-pub fn check_password(db: &Db, username: &str, password: &str) -> Result<bool, String> {
-    if !user_exists(db, username) {
+pub async fn check_password(
+    conn: Arc<Mutex<Connection>>,
+    username: &str,
+    password: &str,
+) -> Result<bool, String> {
+    let exists = user_exists(conn.clone(), username).await;
+    if !exists {
         return Err("User does not exist".to_string());
     }
-    let stored: Password = serde_json::from_slice(&db.get(username).unwrap().unwrap()).unwrap();
-    Ok(stored.hash == password)
+    let conn = conn.lock().await;
+    let mut stmt = conn
+        .prepare("SELECT password_hash FROM users WHERE username = ?1")
+        .unwrap();
+    let stored_hash: String = stmt.query_row([username], |row| row.get(0)).unwrap();
+    Ok(stored_hash == password)
 }
-//helper function to change the password, returns Result<bool, String> and errors if the user does not exist, enforcing the old password at code level, Ok(false) if the old password is incorrect
-pub fn change_password(
-    db: &Db,
+
+pub async fn change_password(
+    conn: Arc<Mutex<Connection>>,
     username: &str,
     old_password: &str,
     new_password: Password,
 ) -> Result<bool, String> {
-    if !check_password(db, username, old_password)? {
+    let valid = check_password(conn.clone(), username, old_password).await?;
+    if !valid {
         return Ok(false);
     }
-    let serialized = serde_json::to_string(&new_password).unwrap();
-    db.insert(username, serialized.as_bytes()).unwrap();
+    let conn = conn.lock().await;
+    conn.execute(
+        "UPDATE users SET password_hash = ?1, salt = ?2, security_key = ?3 WHERE username = ?4",
+        rusqlite::params![
+            new_password.hash,
+            new_password.salt,
+            new_password.security_key,
+            username
+        ],
+    )
+    .unwrap();
     Ok(true)
 }
-//helper function to remove a user, returns Result<bool, String> and errors if the user does not exist, Ok(false) if the password is incorrect
-pub fn remove_user(db: &Db, username: &str, password: &str) -> Result<bool, String> {
-    if !check_password(db, username, password)? {
+
+pub async fn remove_user(
+    conn: Arc<Mutex<Connection>>,
+    username: &str,
+    password: &str,
+) -> Result<bool, String> {
+    let valid = check_password(conn.clone(), username, password).await?;
+    if !valid {
         return Ok(false);
     }
-    db.remove(username).unwrap();
+    let conn = conn.lock().await;
+    conn.execute("DELETE FROM users WHERE username = ?1", [username])
+        .unwrap();
     Ok(true)
 }
-//helper function to change the username, returns Result<bool, String> and errors if the user does not exist, Ok(false) if the password is incorrect
-pub fn change_username(
-    db: &Db,
+
+pub async fn change_username(
+    conn: Arc<Mutex<Connection>>,
     old_username: &str,
     new_username: &str,
     password: &str,
 ) -> Result<bool, Box<dyn Error>> {
-    //check if the new username already exists
-    if user_exists(db, new_username) {
+    let new_exists = user_exists(conn.clone(), new_username).await;
+    let old_exists = user_exists(conn.clone(), old_username).await;
+    let valid = check_password(conn.clone(), old_username, password)
+        .await
+        .unwrap_or(false);
+
+    if new_exists {
         return Err("new username already exists".to_string().into());
     }
-    //check if the old username exists
-    if !user_exists(db, old_username) {
+    if !old_exists {
         return Err("User does not exist".to_string().into());
     }
-    //check if the password is correct
-    if !check_password(db, old_username, password).unwrap_or(false) {
+    if !valid {
         return Ok(false);
     }
-    //get the password object, no need to deserialize it
-    let stored = &db.get(old_username)?.unwrap();
-    //remove the old username from the db
-    db.remove(old_username)?;
-    //insert the password object with the new username
-    db.insert(new_username, stored)?;
+
+    let conn = conn.lock().await;
+    conn.execute(
+        "UPDATE users SET username = ?1 WHERE username = ?2",
+        rusqlite::params![new_username, old_username],
+    )?;
     Ok(true)
 }
-//helper function to get salt
-pub fn get_salt(db: &Db, username: &str) -> Option<String> {
-    if !user_exists(db, username) {
+
+pub async fn get_salt(conn: Arc<Mutex<Connection>>, username: &str) -> Option<String> {
+    let exists = user_exists(conn.clone(), username).await;
+    if !exists {
         return None;
     }
-    let stored: Password = serde_json::from_slice(&db.get(username).unwrap().unwrap()).unwrap();
-    Some(stored.salt)
+    let conn = conn.lock().await;
+    let mut stmt = conn
+        .prepare("SELECT salt FROM users WHERE username = ?1")
+        .unwrap();
+    Some(stmt.query_row([username], |row| row.get(0)).unwrap())
+}
+
+pub async fn get_security_key(conn: Arc<Mutex<Connection>>, username: &str) -> Option<String> {
+    let exists = user_exists(conn.clone(), username).await;
+    if !exists {
+        return None;
+    }
+
+    let conn = conn.lock().await;
+    let mut stmt = match conn.prepare("SELECT security_key FROM users WHERE username = ?1") {
+        Ok(stmt) => stmt,
+        Err(_) => return None,
+    };
+
+    match stmt.query_row([username], |row| row.get::<_, Option<String>>(0)) {
+        Ok(result) => result,
+        Err(_) => None,
+    }
 }

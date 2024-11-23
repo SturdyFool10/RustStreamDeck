@@ -12,6 +12,5 @@ futures.workspace = true
 regex.workspace = true
 prost.workspace = true
 tonic.workspace = true
-sled.workspace = true
 
 file_helpers.workspace = true

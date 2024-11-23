@@ -5,3 +5,5 @@ config.json
 /.vs
 /auth
 /certs
+/.zed
+auth.db

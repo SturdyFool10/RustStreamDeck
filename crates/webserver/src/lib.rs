@@ -287,10 +287,11 @@ async fn handle_recv_task(
                 // Handle authentication
                 MessageTypes::Auth(username, password_hash) => {
                     let auth = database::check_password(
-                        &state.db,
+                        state.db.clone(),
                         username.as_str(),
                         password_hash.as_str(),
                     )
+                    .await
                     .expect("Failed to check password");
 
                     if auth {
@@ -303,8 +304,10 @@ async fn handle_recv_task(
                 }
                 // Handle salt request
                 MessageTypes::RequestSalt(username) => {
-                    let salt = database::get_salt(&state.db, username.as_str())
+                    let salt = database::get_salt(state.db.clone(), username.as_str())
+                        .await
                         .expect("Failed to get salt");
+
                     let salt = salt.as_bytes();
                     let mut salt_message = vec![0x5F, 0x10];
                     salt_message.extend_from_slice(&1u16.to_be_bytes());
@@ -316,9 +319,13 @@ async fn handle_recv_task(
                     let password = Password {
                         hash: password_hash,
                         salt,
+                        security_key: None,
                     };
+
                     let success =
-                        database::add_credentials(&state.db, username.as_str(), password).is_ok();
+                        database::add_credentials(state.db.clone(), username.as_str(), password)
+                            .await
+                            .is_ok();
 
                     if success {
                         send_result_packet(socket.clone(), "acct_created".to_string()).await;
@@ -331,12 +338,15 @@ async fn handle_recv_task(
                 }
                 // Handle password change
                 MessageTypes::ChangePassword(username, old_hash, new_password_hash, salt) => {
+                    let key = database::get_security_key(state.db.clone(), &username).await;
                     let password = Password {
                         hash: new_password_hash,
                         salt,
+                        security_key: key,
                     };
                     let success =
-                        database::change_password(&state.db, &username, &old_hash, password)
+                        database::change_password(state.db.clone(), &username, &old_hash, password)
+                            .await
                             .is_ok();
 
                     if success {
@@ -372,7 +382,7 @@ async fn check_message(
                 }
             };
 
-            if !database::user_exists(&state.db, username.as_str()) {
+            if !database::user_exists(state.db, username.as_str()).await {
                 send_result_packet(socket.clone(), "invalid".to_string()).await;
                 return MessageTypes::Invalid;
             }
@@ -422,7 +432,7 @@ async fn check_message(
             let username = message[0..username_length as usize].to_string();
             let password_hash = message[username_length as usize..].to_string();
 
-            if !database::user_exists(&state.db, username.as_str()) {
+            if !database::user_exists(state.db, username.as_str()).await {
                 send_result_packet(socket.clone(), "invalid".to_string()).await;
                 return MessageTypes::Invalid;
             }
@@ -485,7 +495,7 @@ async fn check_message(
                 .to_string();
             let salt = message[(username_length + password_hash_length) as usize..].to_string();
 
-            if database::user_exists(&state.db, username.as_str()) {
+            if database::user_exists(state.db, username.as_str()).await {
                 send_result_packet(socket.clone(), "err_username_taken".to_string()).await;
                 return MessageTypes::Invalid;
             }
@@ -572,12 +582,13 @@ async fn check_message(
                 + new_password_hash_length as usize..]
                 .to_string();
 
-            if !database::user_exists(&state.db, username.as_str()) {
+            if !database::user_exists(state.db.clone(), username.as_str()).await {
                 send_result_packet(socket.clone(), "invalid".to_string()).await;
                 return MessageTypes::Invalid;
             }
 
-            if !database::check_password(&state.db, username.as_str(), old_password_hash.as_str())
+            if !database::check_password(state.db, username.as_str(), old_password_hash.as_str())
+                .await
                 .unwrap()
             {
                 send_result_packet(socket.clone(), "err_incorrect_password".to_string()).await;

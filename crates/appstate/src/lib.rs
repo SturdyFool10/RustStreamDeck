@@ -1,5 +1,5 @@
 use futures::stream::{SplitSink, SplitStream};
-use sled::Db;
+use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use tracing::info;
@@ -11,17 +11,17 @@ pub struct AppState {
     pub config: Arc<Mutex<config::Config>>,
     pub socket_state_list: Arc<Mutex<Vec<SocketState>>>,
     pub tx: broadcast::Sender<String>,
-    pub db: Db,
+    pub db: Arc<Mutex<Connection>>,
 }
 
 #[allow(dead_code)] //this is a state api, whether it gets used is irrelevant
 impl AppState {
-    pub fn new(config: config::Config, db: Db) -> Self {
+    pub fn new(config: config::Config, db: Arc<Mutex<Connection>>) -> Self {
         Self {
             config: Arc::new(Mutex::new(config)),
             socket_state_list: Arc::new(Mutex::new(Vec::new())),
             tx: broadcast::channel(10).0,
-            db,
+            db: db,
         }
     }
 

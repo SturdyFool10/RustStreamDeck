@@ -12,7 +12,6 @@ futures.workspace = true
 regex.workspace = true
 prost.workspace = true
 tonic.workspace = true
-sled.workspace = true
 rcgen.workspace = true
 local-ip-address.workspace = true
 warp.workspace = true

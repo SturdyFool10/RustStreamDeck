@@ -41,8 +41,6 @@ futures.workspace = true
 regex.workspace = true
 prost.workspace = true
 tonic.workspace = true
-sled.workspace = true
-
 config.workspace = true
 file_helpers.workspace = true
 macros.workspace = true

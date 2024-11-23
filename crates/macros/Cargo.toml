@@ -12,7 +12,7 @@ futures.workspace = true
 regex.workspace = true
 prost.workspace = true
 tonic.workspace = true
-sled.workspace = true
+
 
 config.workspace = true
 app_state.workspace = true
