@@ -3,31 +3,6 @@ name = "StreamDeckReplacement"
 version = "0.1.0"
 edition = "2021"
 
-
-[profile.dev]
-# Development profile: Debugging focus with minimal optimizations
-opt-level = 0
-debug = true
-debug-assertions = true
-overflow-checks = true
-lto = false
-
-[profile.release]
-# Release profile optimized for maximum speed
-opt-level = 3            # Maximum optimization (could also use "3" if "z" affects performance negatively)
-debug = true             # Include debug info for PDB files
-debug-assertions = false # Disable debug assertions for runtime performance
-overflow-checks = false  # Disable integer overflow checks for performance
-lto = "fat"              # Enable full Link Time Optimization (LTO)
-codegen-units = 1        # Single codegen unit for better optimizations
-incremental = false      # Disable incremental compilation for fully optimized builds
-
-[profile.dist]
-# Dist profile for maximum speed without debug information
-panic = "abort"      # Use abort on panic to avoid unwinding costs
-inherits = "release" # Inherit all release settings
-debug = false        # No debug information for PDB (makes binary smaller and faster)
-
 [[bin]]
 name = "StreamDeckReplacement"
 path = "src/main.rs"

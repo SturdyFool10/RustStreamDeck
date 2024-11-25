@@ -11,23 +11,15 @@ pub struct Password {
 
 pub async fn init_db() -> Arc<Mutex<Connection>> {
     let conn = Connection::open("auth.db").unwrap();
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password_hash TEXT NOT NULL,
-            salt TEXT NOT NULL,
-            security_key TEXT
-        )",
-        [],
-    )
-    .unwrap();
+    conn.execute(include_str!("sql_queries/create_tables.sql"), [])
+        .unwrap();
     Arc::new(Mutex::new(conn))
 }
 
 pub async fn user_exists(conn: Arc<Mutex<Connection>>, username: &str) -> bool {
     let conn = conn.lock().await;
     let mut stmt = conn
-        .prepare("SELECT 1 FROM users WHERE username = ?1")
+        .prepare(include_str!("sql_queries/user_exists.sql"))
         .unwrap();
     stmt.exists([username]).unwrap()
 }
@@ -43,7 +35,7 @@ pub async fn add_credentials(
     }
     let conn = conn.lock().await;
     conn.execute(
-        "INSERT INTO users (username, password_hash, salt, security_key) VALUES (?1, ?2, ?3, ?4)",
+        include_str!("sql_queries/add_credentials.sql"),
         rusqlite::params![
             username,
             password.hash,
@@ -57,7 +49,9 @@ pub async fn add_credentials(
 
 pub async fn is_db_empty(conn: Arc<Mutex<Connection>>) -> bool {
     let conn = conn.lock().await;
-    let mut stmt = conn.prepare("SELECT COUNT(*) FROM users").unwrap();
+    let mut stmt = conn
+        .prepare(include_str!("sql_queries/is_db_empty.sql"))
+        .unwrap();
     let count: i64 = stmt.query_row([], |row| row.get(0)).unwrap();
     count == 0
 }
@@ -73,7 +67,7 @@ pub async fn check_password(
     }
     let conn = conn.lock().await;
     let mut stmt = conn
-        .prepare("SELECT password_hash FROM users WHERE username = ?1")
+        .prepare(include_str!("sql_queries/check_password.sql"))
         .unwrap();
     let stored_hash: String = stmt.query_row([username], |row| row.get(0)).unwrap();
     Ok(stored_hash == password)
@@ -91,7 +85,7 @@ pub async fn change_password(
     }
     let conn = conn.lock().await;
     conn.execute(
-        "UPDATE users SET password_hash = ?1, salt = ?2, security_key = ?3 WHERE username = ?4",
+        include_str!("sql_queries/change_password.sql"),
         rusqlite::params![
             new_password.hash,
             new_password.salt,
@@ -113,7 +107,7 @@ pub async fn remove_user(
         return Ok(false);
     }
     let conn = conn.lock().await;
-    conn.execute("DELETE FROM users WHERE username = ?1", [username])
+    conn.execute(include_str!("sql_queries/remove_user.sql"), [username])
         .unwrap();
     Ok(true)
 }
@@ -142,7 +136,7 @@ pub async fn change_username(
 
     let conn = conn.lock().await;
     conn.execute(
-        "UPDATE users SET username = ?1 WHERE username = ?2",
+        include_str!("sql_queries/change_username.sql"),
         rusqlite::params![new_username, old_username],
     )?;
     Ok(true)
@@ -155,7 +149,7 @@ pub async fn get_salt(conn: Arc<Mutex<Connection>>, username: &str) -> Option<St
     }
     let conn = conn.lock().await;
     let mut stmt = conn
-        .prepare("SELECT salt FROM users WHERE username = ?1")
+        .prepare(include_str!("sql_queries/get_salt.sql"))
         .unwrap();
     Some(stmt.query_row([username], |row| row.get(0)).unwrap())
 }
@@ -167,7 +161,7 @@ pub async fn get_security_key(conn: Arc<Mutex<Connection>>, username: &str) -> O
     }
 
     let conn = conn.lock().await;
-    let mut stmt = match conn.prepare("SELECT security_key FROM users WHERE username = ?1") {
+    let mut stmt = match conn.prepare(include_str!("sql_queries/get_security_key.sql")) {
         Ok(stmt) => stmt,
         Err(_) => return None,
     };
